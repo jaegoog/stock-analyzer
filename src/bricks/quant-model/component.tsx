@@ -7,6 +7,7 @@ import type {
   BrickProps,
   FinancialData,
   PriceHistory,
+  PriceHistoryInterval,
   QuantFactor,
   QuantFactorBreakdown,
   QuantFactorType,
@@ -25,6 +26,18 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'edit',     label: '모델 편집' },
   { id: 'score',    label: '점수 기록' },
   { id: 'analysis', label: '분석' },
+]
+
+const PRICE_INTERVALS: { id: PriceHistoryInterval; label: string }[] = [
+  { id: '1d', label: '일봉' },
+  { id: '1wk', label: '주봉' },
+  { id: '1mo', label: '월봉' },
+]
+
+const PRICE_PERIODS: { id: '1y' | '2y' | '5y'; label: string }[] = [
+  { id: '1y', label: '1년' },
+  { id: '2y', label: '2년' },
+  { id: '5y', label: '5년' },
 ]
 
 // ─── 팩터 팩토리 ──────────────────────────────────────────────────────────────
@@ -79,6 +92,10 @@ export default function QuantModelBrick({ ticker, market }: BrickProps) {
   const [models,      setModels]      = useState<QuantModel[]>([])
   const [scoreHistory,setScoreHistory]= useState<QuantScoreRecord[]>([])
   const [priceHistory,setPriceHistory]= useState<PriceHistory | null>(null)
+  const [priceInterval, setPriceInterval] = useState<PriceHistoryInterval>('1mo')
+  const [pricePeriod, setPricePeriod] = useState<'1y' | '2y' | '5y'>('2y')
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false)
+  const [priceHistoryError, setPriceHistoryError] = useState<string | null>(null)
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
   const [editing,     setEditing]     = useState<QuantModel | null>(null)
   const [tab,         setTab]         = useState<TabId>('edit')
@@ -104,13 +121,29 @@ export default function QuantModelBrick({ ticker, market }: BrickProps) {
       .then((d: QuantScoreRecord[]) => setScoreHistory(d))
   }, [ticker, selectedId])
 
-  // 분석 탭 진입 시 주가 히스토리 lazy fetch
+  // 분석 탭: 기간·봉 간격 바뀔 때 Yahoo 주가 시계열 재조회
   useEffect(() => {
-    if (tab !== 'analysis' || priceHistory) return
-    fetch(`/api/stocks/${encodeURIComponent(ticker)}/price-history?period=2y`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => d && setPriceHistory(d as PriceHistory))
-  }, [tab, ticker, priceHistory])
+    if (tab !== 'analysis') return
+    setPriceHistoryLoading(true)
+    setPriceHistoryError(null)
+    const q = new URLSearchParams({ period: pricePeriod, interval: priceInterval })
+    fetch(`/api/stocks/${encodeURIComponent(ticker)}/price-history?${q}`)
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({})) as PriceHistory & { error?: string }
+        if (!r.ok) {
+          setPriceHistory(null)
+          setPriceHistoryError(data.error ?? '주가 데이터를 불러오지 못했습니다.')
+          return
+        }
+        setPriceHistory(data)
+        setPriceHistoryError(null)
+      })
+      .catch(() => {
+        setPriceHistory(null)
+        setPriceHistoryError('주가 데이터를 불러오지 못했습니다.')
+      })
+      .finally(() => setPriceHistoryLoading(false))
+  }, [tab, ticker, priceInterval, pricePeriod])
 
   const selectedModel = models.find((m) => m.id === selectedId) ?? null
   const vars = useMemo(() => extractLatestVarsWithQuote(financials, quote), [financials, quote])
@@ -200,6 +233,15 @@ export default function QuantModelBrick({ ticker, market }: BrickProps) {
     if (xs.length !== ys.length || xs.length < 2) return null
     return pearsonCorrelation(xs, ys)
   }, [analysisChartData])
+
+  const priceSeriesChartData = useMemo(() => {
+    if (!priceHistory?.points.length) return []
+    return priceHistory.points.map((p) => ({
+      date: p.date,
+      close: p.close,
+      cumulativeReturn: p.cumulativeReturn,
+    }))
+  }, [priceHistory])
 
   // ── 점수 탭: 현재 점수 계산 ──────────────────────────────────────────────
   const currentScore = useMemo(() => {
@@ -466,15 +508,78 @@ export default function QuantModelBrick({ ticker, market }: BrickProps) {
 
       {/* ── 분석 탭 ─────────────────────────────────────────────────────── */}
       {tab === 'analysis' && (
-        <div className="p-4">
+        <div className="p-4 space-y-6">
+          <div>
+            <h3 className="text-sm font-medium text-gray-800 mb-2">장기 시세 (Yahoo)</h3>
+            <div className="flex flex-wrap gap-2 mb-2">
+              <span className="text-xs text-gray-500 self-center mr-1">봉:</span>
+              {PRICE_INTERVALS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPriceInterval(id)}
+                  className={`px-2.5 py-1 rounded text-xs border transition-colors ${
+                    priceInterval === id
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="text-xs text-gray-500 self-center ml-3 mr-1">기간:</span>
+              {PRICE_PERIODS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPricePeriod(id)}
+                  className={`px-2.5 py-1 rounded text-xs border transition-colors ${
+                    pricePeriod === id
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {priceHistoryLoading && (
+              <p className="text-xs text-gray-400 py-4">주가 데이터 로딩 중…</p>
+            )}
+            {priceHistoryError && !priceHistoryLoading && (
+              <p className="text-sm text-red-600 py-2">{priceHistoryError}</p>
+            )}
+            {!priceHistoryLoading && !priceHistoryError && priceSeriesChartData.length > 0 && (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={priceSeriesChartData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={32} />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    domain={['auto', 'auto']}
+                    tickFormatter={(v) => formatNumber(v, { decimals: v >= 1000 ? 0 : 2, compact: true })}
+                  />
+                  <Tooltip
+                    formatter={(val: unknown) => [
+                      formatNumber(val as number, { decimals: 2, currency: quote?.currency }),
+                      '종가',
+                    ]}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="close" name="종가" stroke="#0d9488" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
           {scoreHistory.length < 2 ? (
-            <p className="text-center text-gray-400 text-sm py-8">
-              점수를 2회 이상 기록하면 분석을 시작할 수 있습니다.
+            <p className="text-center text-gray-400 text-sm py-4 border-t border-gray-100">
+              점수를 2회 이상 기록하면 점수·주가 수익률 상관 분석 차트를 볼 수 있습니다.
             </p>
           ) : (
             <>
               {correlation !== null && (
-                <div className="mb-3 px-3 py-2 bg-gray-50 rounded border text-sm">
+                <div className="px-3 py-2 bg-gray-50 rounded border text-sm">
                   피어슨 상관계수 (점수 ↔ 주가 수익률):{' '}
                   <span className={`font-bold ${Math.abs(correlation) > 0.5 ? 'text-green-600' : 'text-gray-500'}`}>
                     r = {correlation.toFixed(3)}
@@ -491,8 +596,8 @@ export default function QuantModelBrick({ ticker, market }: BrickProps) {
                   <YAxis yAxisId="return" orientation="right" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(0)}%`} label={{ value: '수익률', angle: 90, position: 'insideRight', fontSize: 11 }} />
                   <Tooltip
                     formatter={(val: unknown, name: unknown) => [
-                      name === 'score' ? `${(val as number).toFixed(1)}점` : `${(val as number).toFixed(1)}%`,
-                      name === 'score' ? '종합 점수' : '누적 수익률',
+                        name === 'score' ? `${(val as number).toFixed(1)}점` : `${(val as number).toFixed(1)}%`,
+                        name === 'score' ? '종합 점수' : '누적 수익률',
                     ] as [string, string]}
                   />
                   <Legend />

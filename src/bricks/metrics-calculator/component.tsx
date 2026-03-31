@@ -8,6 +8,7 @@ import {
   extractPeriodVarsArray,
   FUNDAMENTAL_METRIC_DEFS,
   calcMetricTimeSeries,
+  hasFinancialPeriodData,
 } from '@/lib/financial-metrics'
 
 // ─── 내장 지표 정의 ───────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ export default function MetricsCalculatorBrick({ ticker, market }: BrickProps) {
 
   // ── 차트 전송 핸들러 ──────────────────────────────────────────────────────
   const handleSendBuiltinToChart = (def: BuiltinMetricDef) => {
-    if (!financials) return
+    if (!financials || !hasFinancialPeriodData(financials, 'annual')) return
 
     // fundamental-metrics.ts에 동일 id가 있으면 시계열 계산 위임
     const fundDef = FUNDAMENTAL_METRIC_DEFS.find((d) => d.id === def.id || d.id === def.id.replace('_', '-'))
@@ -98,7 +99,7 @@ export default function MetricsCalculatorBrick({ ticker, market }: BrickProps) {
   }
 
   const handleSendCustomToChart = (metric: CustomMetric) => {
-    if (!financials) return
+    if (!financials || !hasFinancialPeriodData(financials, 'annual')) return
     const varsArray = extractPeriodVarsArray(financials, 'annual')
     const years     = financials.annual.income.years
     const series    = years.map((year, i) => ({

@@ -1,12 +1,12 @@
 'use client'
 import { useParams } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { detectMarket, normalizeKRTicker } from '@/lib/utils'
 import StockOverview from '@/components/StockOverview'
 import BrickRenderer from '@/components/BrickRenderer'
 import BrickManager from '@/components/BrickManager'
 import AgentPrompt from '@/components/AgentPrompt'
-import type { Market } from '@/types'
+import type { Market, ValidationAutoRunEventDetail } from '@/types'
 
 export default function StockPage() {
   const { ticker } = useParams<{ ticker: string }>()
@@ -14,6 +14,17 @@ export default function StockPage() {
   const symbol = normalizeKRTicker(decoded)
   const market: Market = detectMarket(symbol)
   const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent<ValidationAutoRunEventDetail>('brick:validation-auto-run', {
+          detail: { ticker: symbol, market },
+        })
+      )
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [symbol, market])
 
   return (
     <div className="min-h-screen bg-gray-50">

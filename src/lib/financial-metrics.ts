@@ -66,6 +66,40 @@ export function evalFormula(
 
 // ─── FinancialData → FinancialPeriodVars 변환 ─────────────────────────────────
 
+/** API 에러 객체 등 annual/quarterly 블록이 없을 때 false */
+export function hasFinancialPeriodData(
+  financials: FinancialData | null | undefined,
+  period: 'annual' | 'quarterly'
+): financials is FinancialData {
+  const block = financials?.[period]
+  return !!(
+    block?.income?.years?.length &&
+    block?.balance &&
+    block?.cashflow
+  )
+}
+
+function emptyFinancialPeriodVars(): FinancialPeriodVars {
+  return {
+    totalRevenue: null,
+    operatingIncome: null,
+    netIncome: null,
+    ebitda: null,
+    equity: null,
+    totalAssets: null,
+    totalLiab: null,
+    operatingCashFlow: null,
+    capex: null,
+    interestExpense: null,
+    accountsReceivable: null,
+    inventory: null,
+    accountsPayable: null,
+    dividendsPaid: null,
+    currentAssets: null,
+    currentLiabilities: null,
+  }
+}
+
 /** FinancialStatement 행에서 특정 field의 i번째 값을 추출 */
 function rowVal(
   statement: FinancialStatement | undefined,
@@ -87,6 +121,10 @@ export function extractPeriodVars(
   period: 'annual' | 'quarterly',
   index: number
 ): FinancialPeriodVars {
+  if (!hasFinancialPeriodData(financials, period)) {
+    return emptyFinancialPeriodVars()
+  }
+
   const statements = financials[period]
   const income = statements.income
   const balance = statements.balance
@@ -99,6 +137,7 @@ export function extractPeriodVars(
     totalRevenue:       I(income,   'totalRevenue'),
     operatingIncome:    I(income,   'operatingIncome', 'totalOperatingIncomeAsReported'),
     netIncome:          I(income,   'netIncome'),
+    ebitda:             I(income,   'ebitda'),
     interestExpense:    I(income,   'interestExpense'),
     equity:             I(balance,  'totalEquity', 'totalEquityGrossMinorityInterest', 'totalStockholderEquity'),
     totalAssets:        I(balance,  'totalAssets'),
@@ -109,6 +148,8 @@ export function extractPeriodVars(
     operatingCashFlow:  I(cashflow, 'operatingCashFlow'),
     capex:              I(cashflow, 'capex', 'capitalExpenditure'),
     dividendsPaid:      I(cashflow, 'dividendsPaid', 'commonStockDividendPaid'),
+    currentAssets:      I(balance,  'currentAssets', 'totalCurrentAssets'),
+    currentLiabilities: I(balance,  'currentLiabilities', 'totalCurrentLiabilities'),
   }
 }
 
@@ -120,6 +161,7 @@ export function extractPeriodVarsArray(
   financials: FinancialData,
   period: 'annual' | 'quarterly'
 ): FinancialPeriodVars[] {
+  if (!hasFinancialPeriodData(financials, period)) return []
   const length = financials[period].income.years.length
   return Array.from({ length }, (_, i) => extractPeriodVars(financials, period, i))
 }
@@ -132,13 +174,13 @@ export function extractLatestVarsWithQuote(
   financials: FinancialData | null,
   quote: StockQuote | null
 ): Record<string, number> {
-  const base = financials
+  const base = hasFinancialPeriodData(financials, 'annual')
     ? extractPeriodVars(financials, 'annual', 0)
-    : ({} as FinancialPeriodVars)
+    : emptyFinancialPeriodVars()
 
   const price = quote?.price ?? 0
   const pe    = quote?.pe ?? null
-  const eps   = pe && price ? price / pe : 0
+  const eps   = pe != null && pe !== 0 && price ? price / pe : 0
   const shares = (() => {
     if (!quote) return 0
     const direct = quote.sharesOutstanding
@@ -155,9 +197,11 @@ export function extractLatestVarsWithQuote(
     price,
     eps,
     shares,
+    pe:                 pe ?? 0,
     totalRevenue:       toNum(base.totalRevenue),
     operatingIncome:    toNum(base.operatingIncome),
     netIncome:          toNum(base.netIncome),
+    ebitda:             toNum(base.ebitda),
     equity:             toNum(base.equity),
     totalAssets:        toNum(base.totalAssets),
     totalLiab:          toNum(base.totalLiab),
@@ -168,8 +212,8 @@ export function extractLatestVarsWithQuote(
     inventory:          toNum(base.inventory),
     accountsPayable:    toNum(base.accountsPayable),
     dividendsPaid:      toNum(base.dividendsPaid),
-    currentAssets:      toNum(extractPeriodVars(financials ?? ({} as FinancialData), 'annual', 0).accountsReceivable), // fallback
-    currentLiabilities: 0,
+    currentAssets:      toNum(base.currentAssets),
+    currentLiabilities: toNum(base.currentLiabilities),
   }
 }
 
@@ -178,23 +222,59 @@ export function extractLatestVarsWithQuote(
 const safe = (a: number | null, b: number | null): [number, number] | null =>
   a !== null && b !== null && b !== 0 ? [a, b] : null
 
+/**
+ * Open DART 공개 비율 M211550 (ROE). 원문 산식 문자열 괄호는 불완전하나,
+ * 동일 파일 내 타 지표(M212000 등)와 맞추면 분모는 (자본총계[t]+자본총계[t-1])/2.
+ * 전기 데이터가 없으면 기말 자기자본 단일 시점으로 폴백.
+ */
+function roeWithAverageEquity(
+  current: FinancialPeriodVars,
+  previous: FinancialPeriodVars | undefined
+): number | null {
+  const ni = current.netIncome
+  const eq = current.equity
+  if (ni === null || eq === null) return null
+  if (previous != null && previous.equity != null) {
+    const avg = (eq + previous.equity) / 2
+    if (avg === 0) return null
+    return (ni / avg) * PCT
+  }
+  if (eq === 0) return null
+  return (ni / eq) * PCT
+}
+
+/** Open DART 공개 비율 M241000 (총자산회전율) — 분모 평균(자산총계). 전기 없으면 기말 총자산 폴백. */
+function assetTurnoverWithAverageAssets(
+  current: FinancialPeriodVars,
+  previous: FinancialPeriodVars | undefined
+): number | null {
+  const rev = current.totalRevenue
+  const assets = current.totalAssets
+  if (rev === null || assets === null) return null
+  if (previous != null && previous.totalAssets != null) {
+    const avg = (assets + previous.totalAssets) / 2
+    if (avg === 0) return null
+    return rev / avg
+  }
+  if (assets === 0) return null
+  return rev / assets
+}
+
 export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   // ── 구조적 해자 & 파산 위험 ─────────────────────────────────────────────────
   {
     id: 'roe',
     name: 'ROE',
-    description: '자기자본이익률 — 자본 대비 순이익 창출 능력',
+    description:
+      '자기자본이익률 — Open DART M211550(당기순이익/평균 자본총계). 전기 자료 없을 때만 기말 자본 단일 시점',
     category: 'moat-bankruptcy',
     unit: 'percent',
-    calc: ({ netIncome, equity }) => {
-      const p = safe(netIncome, equity)
-      return p ? (p[0] / p[1]) * PCT : null
-    },
+    calc: (v) => roeWithAverageEquity(v, undefined),
   },
   {
     id: 'operating-margin',
     name: '영업이익률',
-    description: '매출 대비 영업이익 비율 — 핵심 사업 수익성',
+    description: '매출 대비 영업이익 비율 — Open DART M211000(영업이익/매출액)',
     category: 'moat-bankruptcy',
     unit: 'percent',
     calc: ({ operatingIncome, totalRevenue }) => {
@@ -205,7 +285,8 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'interest-coverage',
     name: '이자보상배율',
-    description: '영업이익 ÷ 이자비용 — 파산 위험 핵심 지표 (1 미만 위험)',
+    description:
+      '영업이익 ÷ 이자비용 — Open DART M221600. 이자수익 차감 버전(M221610 순이자보상배율)과는 별개',
     category: 'moat-bankruptcy',
     unit: 'ratio',
     calc: ({ operatingIncome, interestExpense }) => {
@@ -216,7 +297,7 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'debt-ratio',
     name: '부채비율',
-    description: '총부채 ÷ 자기자본 × 100 — 재무 레버리지',
+    description: '총부채 ÷ 자기자본 × 100 — Open DART M221100(부채총계/자본총계, % 표시)',
     category: 'moat-bankruptcy',
     unit: 'percent',
     calc: ({ totalLiab, equity }) => {
@@ -229,7 +310,7 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'operating-income-growth',
     name: '영업이익증가율',
-    description: '전년 대비 영업이익 성장률 (YoY)',
+    description: '전년 대비 영업이익 성장률 — Open DART M231400((영업이익[t]-영업이익[t-1])/ABS(영업이익[t-1]))',
     category: 'growth',
     unit: 'percent',
     /** 단일 기간 vars로는 계산 불가 — calcFundamentalMetrics에서 직접 처리 */
@@ -238,7 +319,7 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'revenue-growth',
     name: '매출액증가율',
-    description: '전년 대비 매출 성장률 (YoY)',
+    description: '전년 대비 매출 성장률 — Open DART M231000((매출액[t]-매출액[t-1])/ABS(매출액[t-1]))',
     category: 'growth',
     unit: 'percent',
     calc: () => null,
@@ -248,7 +329,8 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'fcf',
     name: 'FCF',
-    description: '잉여현금흐름 = 영업현금흐름 − CAPEX',
+    description:
+      '잉여현금흐름 = 영업현금흐름 − CAPEX — Open DART 공개 재무비율 시트(추출 본)에 동일 명목 항목 없음',
     category: 'cash-generation',
     unit: 'currency',
     calc: ({ operatingCashFlow, capex }) => {
@@ -259,7 +341,8 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'cash-conversion-cycle',
     name: '현금순환주기',
-    description: '(매출채권 + 재고) ÷ 매출 × 365 − 매입채무 ÷ 매출 × 365',
+    description:
+      '(매출채권+재고−매입채무)/매출×365일 간이식 — DART는 별도 회전율(M241100 등) 제시, 동일 단일 지표명은 시트에 없음',
     category: 'cash-generation',
     unit: 'days',
     calc: ({ accountsReceivable, inventory, accountsPayable, totalRevenue }) => {
@@ -275,7 +358,8 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'retention-ratio',
     name: '유보율',
-    description: '(순이익 − 배당금) ÷ 순이익 × 100 — 재투자 여력',
+    description:
+      '(순이익−배당)/순이익×100 — 이익잔류율(earnings retention). Open DART 자본유보율 M223000·유보액대비율 M223100과 정의 불일치',
     category: 'dividend-capacity',
     unit: 'percent',
     calc: ({ netIncome, dividendsPaid }) => {
@@ -287,13 +371,11 @@ export const FUNDAMENTAL_METRIC_DEFS: FundamentalMetricDef[] = [
   {
     id: 'asset-turnover',
     name: '총자산회전율',
-    description: '매출 ÷ 총자산 — 자산 활용 효율성',
+    description:
+      '매출 ÷ 평균(자산총계) — Open DART M241000. 전기 없으면 기말 총자산 단일 시점',
     category: 'dividend-capacity',
     unit: 'ratio',
-    calc: ({ totalRevenue, totalAssets }) => {
-      const p = safe(totalRevenue, totalAssets)
-      return p ? p[0] / p[1] : null
-    },
+    calc: (v) => assetTurnoverWithAverageAssets(v, undefined),
   },
 ]
 
@@ -327,6 +409,24 @@ export function calcFundamentalMetrics(
       const v1  = annualVars[1]?.[key] ?? null
       annualYoY  = calcYoY(v0 as number | null, v1 as number | null)
       annualValue = annualYoY  // 성장률 지표의 "현재값" = YoY 자체
+    } else if (def.id === 'roe') {
+      annualValue = annualVars[0]
+        ? roeWithAverageEquity(annualVars[0], annualVars[1])
+        : null
+      const prevRoe =
+        annualVars[1] != null
+          ? roeWithAverageEquity(annualVars[1], annualVars[2])
+          : null
+      annualYoY = calcYoY(annualValue, prevRoe)
+    } else if (def.id === 'asset-turnover') {
+      annualValue = annualVars[0]
+        ? assetTurnoverWithAverageAssets(annualVars[0], annualVars[1])
+        : null
+      const prevTurn =
+        annualVars[1] != null
+          ? assetTurnoverWithAverageAssets(annualVars[1], annualVars[2])
+          : null
+      annualYoY = calcYoY(annualValue, prevTurn)
     } else {
       annualValue = annualVars[0] ? def.calc(annualVars[0]) : null
       const prevAnnual = annualVars[1] ? def.calc(annualVars[1]) : null
@@ -346,6 +446,30 @@ export function calcFundamentalMetrics(
         quarterlyValue = calcYoY(q0 as number | null, q4 as number | null)
         quarterlyQoQ   = calcYoY(q0 as number | null, q1 as number | null)
         quarterlyYoY   = quarterlyValue
+      } else if (def.id === 'roe') {
+        quarterlyValue = quarterlyVars[0]
+          ? roeWithAverageEquity(quarterlyVars[0], quarterlyVars[1])
+          : null
+        const prevQ = quarterlyVars[1]
+          ? roeWithAverageEquity(quarterlyVars[1], quarterlyVars[2])
+          : null
+        const sameQLastYear = quarterlyVars[4]
+          ? roeWithAverageEquity(quarterlyVars[4], quarterlyVars[5])
+          : null
+        quarterlyQoQ = calcYoY(quarterlyValue, prevQ)
+        quarterlyYoY = calcYoY(quarterlyValue, sameQLastYear)
+      } else if (def.id === 'asset-turnover') {
+        quarterlyValue = quarterlyVars[0]
+          ? assetTurnoverWithAverageAssets(quarterlyVars[0], quarterlyVars[1])
+          : null
+        const prevQ = quarterlyVars[1]
+          ? assetTurnoverWithAverageAssets(quarterlyVars[1], quarterlyVars[2])
+          : null
+        const sameQLastYear = quarterlyVars[4]
+          ? assetTurnoverWithAverageAssets(quarterlyVars[4], quarterlyVars[5])
+          : null
+        quarterlyQoQ = calcYoY(quarterlyValue, prevQ)
+        quarterlyYoY = calcYoY(quarterlyValue, sameQLastYear)
       } else {
         quarterlyValue = quarterlyVars[0] ? def.calc(quarterlyVars[0]) : null
         const prevQ    = quarterlyVars[1] ? def.calc(quarterlyVars[1]) : null
@@ -383,15 +507,24 @@ export function calcMetricTimeSeries(
 ): { year: string; value: number | null }[] {
   const def = FUNDAMENTAL_METRIC_DEFS.find((d) => d.id === metricId)
   if (!def) return []
+  if (!hasFinancialPeriodData(financials, period)) return []
 
   const statements = financials[period]
   const years      = statements.income.years
   const varsArray  = extractPeriodVarsArray(financials, period)
 
-  return years.map((year, i) => ({
-    year,
-    value: varsArray[i] ? def.calc(varsArray[i]) : null,
-  }))
+  return years.map((year, i) => {
+    const cur = varsArray[i]
+    if (!cur) return { year, value: null }
+    const prev = varsArray[i + 1]
+    const value =
+      metricId === 'roe'
+        ? roeWithAverageEquity(cur, prev)
+        : metricId === 'asset-turnover'
+          ? assetTurnoverWithAverageAssets(cur, prev)
+          : def.calc(cur)
+    return { year, value }
+  })
 }
 
 // ─── 퀀트 모델 — 정규화 & 통계 ───────────────────────────────────────────────

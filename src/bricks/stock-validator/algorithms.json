@@ -1,1 +1,87 @@
-[]
+[
+  {
+    "id": "quantamental-5stage-v1",
+    "name": "전천후 퀀타멘탈 5단계",
+    "description": "DART/Yahoo 연간 재무·시세 기반 자동 게이트 + 플랜 Task2~5 수동 절차. Task2: 벤치 ^KS200/SPY 롤링 20일 -10% 구간 3곳 중 상대수익률>0 이 2구간 이상.",
+    "createdAt": "2026-04-01T00:00:00.000Z",
+    "updatedAt": "2026-04-01T00:00:00.000Z",
+    "steps": [
+      {
+        "id": "t1-ocf-rev",
+        "name": "[T1] OCF÷매출×100 ≥ 2%",
+        "description": "데이터: /dart 또는 /financials 영업활동현금흐름·매출액. 단위 동일(천원·원) 전제.",
+        "formula": "(operatingCashFlow / (totalRevenue || 1)) * 100",
+        "threshold": 2,
+        "operator": "gte"
+      },
+      {
+        "id": "t1-op-margin",
+        "name": "[T1] 영업이익÷매출×100 ≥ 5%",
+        "description": "영업이익률(%) 최소 기준.",
+        "formula": "(operatingIncome / (totalRevenue || 1)) * 100",
+        "threshold": 5,
+        "operator": "gte"
+      },
+      {
+        "id": "t1-interest-cv",
+        "name": "[T1] 이자보상배율 ≥ 2",
+        "description": "이자비용>0일 때 영업이익/이자비용; 이자 없고 영업이익>0이면 통과용 99.",
+        "formula": "interestExpense > 0 ? operatingIncome / interestExpense : (operatingIncome > 0 ? 99 : 0)",
+        "threshold": 2,
+        "operator": "gte"
+      },
+      {
+        "id": "t1-ebitda-pos",
+        "name": "[T1] EBITDA > 0",
+        "description": "손익 EBITDA 행 또는 추정값이 양수.",
+        "formula": "ebitda > 0 ? 1 : 0",
+        "threshold": 1,
+        "operator": "gte"
+      },
+      {
+        "id": "t2-rs-gate",
+        "name": "[T2] 상대강도·MDD 게이트(수동)",
+        "description": "일간 종가·거래량 vs 벤치(KR ^KS200, US SPY). 롤링 20거래일 누적 ≤-10% 후보로 구간 3곳. 각 구간 상대수익률(%)=R_stock-R_index. Gate: relative_return>0 인 구간 ≥ 2/3. 산출: MDD%, 거래량 Z(구간 전 252일).",
+        "formula": "0",
+        "threshold": 0,
+        "operator": "eq",
+        "manualOnly": true
+      },
+      {
+        "id": "t3-per-cap",
+        "name": "[T3] PER ≤ 60",
+        "description": "시세 quote PE 극단 배제. PE 없으면 999로 미통과 처리.",
+        "formula": "pe > 0 ? pe : 999",
+        "threshold": 60,
+        "operator": "lte"
+      },
+      {
+        "id": "t3-macro",
+        "name": "[T3] 매크로 스트레스 1~10(수동)",
+        "description": "FRED·ECOS 실물 지표 YoY vs 섹터 PER/PS Z 괴리. macroRiskScore 1~10, w=score/10.",
+        "formula": "0",
+        "threshold": 0,
+        "operator": "eq",
+        "manualOnly": true
+      },
+      {
+        "id": "t4-moat",
+        "name": "[T4] 증거 기반 해자(수동)",
+        "description": "MD&A 인용 3건(각 50자+, rcept_no/URL). 부문 매출 비중 합계 100±0.5%. 반증 시나리오 1건+트리거 지표.",
+        "formula": "0",
+        "threshold": 0,
+        "operator": "eq",
+        "manualOnly": true
+      },
+      {
+        "id": "t5-sotp",
+        "name": "[T5] SOTP·인구(수동)",
+        "description": "KOSIS/UN 인구 CAGR 부호. DART 종속·지분법 표. Bear/Base/Bull 내재가치 밴드만(단일 목표가 금지).",
+        "formula": "0",
+        "threshold": 0,
+        "operator": "eq",
+        "manualOnly": true
+      }
+    ]
+  }
+]

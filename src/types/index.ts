@@ -78,6 +78,9 @@ export interface FinancialStatement {
   rows: FinancialRow[]
 }
 
+/** Open DART `/dart?fs=` — 자동은 CFS 있으면 연결, 없으면 별도 */
+export type DartFsRequestMode = 'auto' | 'cfs' | 'ofs'
+
 export interface FinancialData {
   ticker: string
   market: Market
@@ -90,6 +93,13 @@ export interface FinancialData {
     income: FinancialStatement
     balance: FinancialStatement
     cashflow: FinancialStatement
+  }
+  /** KR `/api/stocks/.../dart` 응답에만 포함 */
+  dartFs?: {
+    requested: DartFsRequestMode
+    applied: 'cfs' | 'ofs'
+    cfsAvailable: boolean
+    ofsAvailable: boolean
   }
 }
 
@@ -178,6 +188,8 @@ export interface FinancialPeriodVars {
   totalRevenue: number | null
   operatingIncome: number | null
   netIncome: number | null
+  /** 손익 EBITDA 행(DART 등); 없으면 null */
+  ebitda: number | null
   equity: number | null
   totalAssets: number | null
   totalLiab: number | null
@@ -188,6 +200,8 @@ export interface FinancialPeriodVars {
   inventory: number | null
   accountsPayable: number | null
   dividendsPaid: number | null
+  currentAssets: number | null
+  currentLiabilities: number | null
 }
 
 // ─── Fundamental Metrics (기업 본질 파악 지표) ────────────────────────────────
@@ -231,11 +245,24 @@ export type ValidationOperator = 'gte' | 'lte' | 'gt' | 'lt' | 'eq'
 export interface ValidationStep {
   id: string
   name: string
-  /** evalFormula에 전달되는 공식 (FinancialPeriodVars + price/shares/eps 변수 사용 가능) */
+  /** evalFormula에 전달되는 공식 (FinancialPeriodVars + price/shares/eps/pe/ebitda 변수 사용 가능) */
   formula: string
   threshold: number
   operator: ValidationOperator
   description: string
+  /** true면 수식 미평가·점수 분모 제외(플랜 T2~T5 수동 절차) */
+  manualOnly?: boolean
+}
+
+/** 분석 상태 머신 (가설 → 물리적 제약 → 논리 검증 → 최종 출력) */
+export type AnalysisPhase = 'Hypothesis' | 'PhysicalConstraint' | 'LogicalVerify' | 'FinalOutput'
+
+/** 종목 진입 시 검증 자동 실행 ([stock]/page 등) */
+export interface ValidationAutoRunEventDetail {
+  ticker: string
+  market: Market
+  /** 미지정 시 기본 알고리즘 ID 사용 */
+  algorithmId?: string
 }
 
 export interface ValidationAlgorithm {
@@ -250,7 +277,8 @@ export interface ValidationAlgorithm {
 export interface ValidationStepResult {
   step: ValidationStep
   actualValue: number | null
-  passed: boolean
+  /** manualOnly 단계는 null */
+  passed: boolean | null
   error?: string
 }
 
@@ -259,8 +287,12 @@ export interface ValidationRun {
   ticker: string
   runAt: string
   stepResults: ValidationStepResult[]
-  /** 통과 단계 수 / 전체 단계 수 (0~1) */
+  /** 통과 단계 수 / 전체 단계 수 (0~1); manualOnly 제외 */
   score: number
+  /** 성공 시 전 구간 기록; 물리 제약 실패 시 중간까지 */
+  phaseTrace?: AnalysisPhase[]
+  /** PhysicalConstraint 등에서 중단 시 사유 */
+  stopReason?: string
 }
 
 // ─── Quant Model (퀀트 투자 알고리즘) ────────────────────────────────────────
@@ -317,6 +349,9 @@ export interface QuantScoreRecord {
 
 // ─── Price History ────────────────────────────────────────────────────────────
 
+/** yahoo-finance2 `historical()` — 일·주·월 봉만 지원 */
+export type PriceHistoryInterval = '1d' | '1wk' | '1mo'
+
 export interface PriceHistoryPoint {
   date: string
   close: number
@@ -327,6 +362,7 @@ export interface PriceHistoryPoint {
 export interface PriceHistory {
   ticker: string
   period: '1y' | '2y' | '5y'
+  interval: PriceHistoryInterval
   points: PriceHistoryPoint[]
 }
 
