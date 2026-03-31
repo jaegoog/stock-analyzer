@@ -1,0 +1,11 @@
+{
+  "id": "stock-validator",
+  "name": "주식 검증 알고리즘",
+  "description": "나만의 다단계 Pass/Fail 검증 알고리즘을 정의하고 임의 종목에 적용하여 단계별 결과를 확인합니다.",
+  "version": "1.0.0",
+  "author": "system",
+  "category": "calculation",
+  "dataRequired": ["financials", "quote"],
+  "enabled": true,
+  "createdAt": "2026-03-31"
+}

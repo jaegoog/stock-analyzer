@@ -1,0 +1,11 @@
+{
+  "id": "quant-model",
+  "name": "퀀트 투자 모델",
+  "description": "정량·정성 팩터를 수학 공식으로 통합하여 종합 점수를 산출하고 실제 주가 수익률과 비교합니다.",
+  "version": "1.0.0",
+  "author": "system",
+  "category": "calculation",
+  "dataRequired": ["financials", "quote"],
+  "enabled": true,
+  "createdAt": "2026-03-31"
+}

@@ -19,6 +19,21 @@
       "id": "news",
       "enabled": true,
       "order": 3
+    },
+    {
+      "id": "fundamental-metrics",
+      "enabled": true,
+      "order": 4
+    },
+    {
+      "id": "stock-validator",
+      "enabled": true,
+      "order": 5
+    },
+    {
+      "id": "quant-model",
+      "enabled": true,
+      "order": 6
     }
   ]
 }

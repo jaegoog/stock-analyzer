@@ -1,0 +1,11 @@
+{
+  "id": "fundamental-metrics",
+  "name": "기업 본질 지표",
+  "description": "구조적 해자, 파산 위험, 성장성, 현금창출, 배당 여력을 10개 지표로 분석. YoY/QoQ 포함.",
+  "version": "1.0.0",
+  "author": "system",
+  "category": "calculation",
+  "dataRequired": ["financials"],
+  "enabled": true,
+  "createdAt": "2026-03-31"
+}

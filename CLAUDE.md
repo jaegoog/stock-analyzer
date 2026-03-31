@@ -51,12 +51,30 @@ src/bricks/
 | `alert` | 조건 알림 |
 
 ### 기본 설치 Brick
-| ID | 이름 | 카테고리 |
-|----|------|---------|
-| `financial-statements` | 재무제표 | table |
-| `interactive-chart` | 재무 차트 | chart |
-| `metrics-calculator` | 투자 지표 계산기 | calculation |
-| `news` | 관련 뉴스 | research |
+| ID | 이름 | 카테고리 | 비고 |
+|----|------|---------|------|
+| `financial-statements` | 재무제표 | table | |
+| `interactive-chart` | 재무 차트 | chart | Brick 이벤트 수신 — 동적 지표 시리즈 추가 가능 |
+| `metrics-calculator` | 투자 지표 계산기 | calculation | 📊 버튼으로 차트에 시계열 전송 |
+| `news` | 관련 뉴스 | research | |
+| `fundamental-metrics` | 기업 본질 지표 | calculation | 10개 지표 + YoY/QoQ 배지 |
+| `stock-validator` | 주식 검증 알고리즘 | calculation | 다단계 Pass/Fail 알고리즘 CRUD + 실행 |
+| `quant-model` | 퀀트 투자 모델 | calculation | 정량·정성 팩터 → 종합 점수 → 주가 수익률 비교 |
+
+### Brick 간 통신 (CustomEvent 버스)
+Brick은 직접 import 없이 `window` CustomEvent로 통신한다.
+
+```typescript
+// 발신 (metrics-calculator, fundamental-metrics)
+window.dispatchEvent(new CustomEvent('brick:chart-request', {
+  detail: { ticker, metricId, label, series: [{year, value}], unit }
+}))
+
+// 수신 (interactive-chart)
+window.addEventListener('brick:chart-request', handler)
+```
+
+이벤트 payload에 `ticker`를 포함해 다른 종목의 이벤트를 필터링한다.
 
 ---
 
@@ -143,12 +161,26 @@ src/
 │       ├── stocks/[ticker]/financials/       # GET 재무제표 → FinancialsProvider
 │       ├── stocks/[ticker]/news/             # GET 뉴스 → NewsProvider
 │       ├── stocks/[ticker]/dart/             # GET 한국 재무제표 (레거시 유지)
+│       ├── stocks/[ticker]/price-history/    # GET ?period=1y|2y|5y 주가 히스토리
 │       ├── providers/registry/               # GET/PUT Provider 활성화 관리
 │       ├── providers/[providerId]/manifest/  # GET Provider 메타정보
 │       ├── agent/create-brick/               # POST AI Brick 자동 생성
 │       ├── agent/delete-brick/               # DELETE Brick 삭제
-│       └── bricks/registry/                  # GET/PUT Brick 활성화 관리
-├── bricks/                                   # Brick 플러그인 저장소
+│       ├── bricks/registry/                  # GET/PUT Brick 활성화 관리
+│       ├── bricks/metrics-calculator/custom/ # GET/PUT 커스텀 지표 저장
+│       ├── bricks/stock-validator/algorithms/# GET/PUT 검증 알고리즘 저장
+│       └── bricks/quant-model/
+│           ├── models/                       # GET/PUT 퀀트 모델 저장
+│           └── scores/                       # GET?ticker=&modelId= / POST 점수 기록
+├── bricks/
+│   ├── registry.json                         # Brick 활성화·순서 관리
+│   ├── financial-statements/                 # 재무제표 테이블
+│   ├── interactive-chart/                    # 재무 차트 (동적 시리즈 수신)
+│   ├── metrics-calculator/                   # 투자 지표 (차트 전송 기능)
+│   ├── news/                                 # 관련 뉴스
+│   ├── fundamental-metrics/                  # 기업 본질 10개 지표
+│   ├── stock-validator/                      # 주식 검증 알고리즘
+│   └── quant-model/                          # 퀀트 투자 모델
 ├── providers/                                # Provider 플러그인 저장소
 ├── components/
 │   ├── BrickRenderer.tsx                     # registry 기반 동적 Brick 렌더링
@@ -160,6 +192,7 @@ src/
 ├── lib/
 │   ├── yahoo-finance.ts                      # yahoo-finance2 싱글턴
 │   ├── brick-registry.ts                     # Brick registry 유틸
+│   ├── financial-metrics.ts                  # 재무 지표 공유 계산 엔진 (순수 함수)
 │   └── utils.ts                              # formatNumber, detectMarket, guessSentiment 등
 └── types/index.ts                            # 전체 TypeScript 인터페이스
 ```
@@ -190,6 +223,9 @@ curl http://localhost:3000/api/stocks/005930.KS
 curl http://localhost:3000/api/stocks/AAPL/financials
 curl http://localhost:3000/api/stocks/005930.KS/financials
 
+# 주가 히스토리 테스트 (신규)
+curl "http://localhost:3000/api/stocks/AAPL/price-history?period=1y"
+
 # 뉴스 테스트
 curl http://localhost:3000/api/stocks/AAPL/news
 curl http://localhost:3000/api/stocks/005930.KS/news
@@ -199,6 +235,12 @@ curl http://localhost:3000/api/providers/registry
 
 # Brick 목록 확인
 curl http://localhost:3000/api/bricks/registry
+
+# 검증 알고리즘 목록 확인 (신규)
+curl http://localhost:3000/api/bricks/stock-validator/algorithms
+
+# 퀀트 모델 목록 확인 (신규)
+curl http://localhost:3000/api/bricks/quant-model/models
 ```
 
 ---
@@ -206,13 +248,60 @@ curl http://localhost:3000/api/bricks/registry
 ## 주요 타입 (src/types/index.ts)
 - `BrickProps` — 모든 Brick 컴포넌트가 받는 props
 - `BrickManifest` — Brick manifest.json 스키마
-- `FinancialData` — 재무제표 데이터 구조
+- `FinancialData` — 재무제표 데이터 구조 (annual/quarterly × income/balance/cashflow)
+- `FinancialPeriodVars` — 단일 시점 재무 변수 묶음 (lib/financial-metrics.ts 계산 입력)
 - `StockQuote` — 시세 데이터
 - `MacroSeries` — 거시경제 시계열 데이터
 - `Market` — `'KR' | 'US' | 'GLOBAL'`
+- `ChartRequestEventDetail` — Brick 간 차트 이벤트 payload
+- `FundamentalMetricResult` — 본질 지표 계산 결과 (YoY/QoQ 포함)
+- `ValidationAlgorithm` / `ValidationStep` / `ValidationRun` — 주식 검증 알고리즘
+- `QuantModel` / `QuantFactor` / `QuantScoreRecord` — 퀀트 투자 모델
+- `PriceHistory` / `PriceHistoryPoint` — 주가 히스토리
 
 ## 주요 타입 (src/providers/types.ts)
 - `ProviderFactory` — Provider index.ts의 default export 인터페이스
 - `ProviderManifest` — Provider manifest.json 스키마
 - `PriceProvider` / `FinancialsProvider` / `NewsProvider` / `MacroProvider`
 - `DataType` — `'price' | 'financials' | 'news' | 'macro' | 'search'`
+
+---
+
+## 공유 계산 엔진 (src/lib/financial-metrics.ts)
+
+모든 재무 지표 계산은 이 파일의 순수 함수로 수행한다. UI 코드에서 직접 계산 금지.
+
+| 함수 | 역할 |
+|------|------|
+| `extractPeriodVars(financials, period, index)` | 특정 기간·인덱스의 `FinancialPeriodVars` 추출 |
+| `extractPeriodVarsArray(financials, period)` | 전체 기간 배열 반환 |
+| `extractLatestVarsWithQuote(financials, quote)` | 최신값 + 주가/주식수/EPS 포함 vars |
+| `calcFundamentalMetrics(financials)` | 10개 본질 지표 + YoY/QoQ 일괄 계산 |
+| `calcMetricTimeSeries(financials, period, metricId)` | 지표의 연도별 시계열 (차트 전송용) |
+| `evalFormula(formula, vars)` | 문자열 수식 평가 (stock-validator, quant-model 공용) |
+| `calcYoY(current, previous)` | 전년 대비 변화율 |
+| `calcQoQ(current, previous)` | 전분기 대비 변화율 |
+| `normalizeValue(value, method, options)` | 퀀트 팩터 정규화 (minmax/zscore/raw) |
+| `pearsonCorrelation(xs, ys)` | 피어슨 상관계수 |
+
+### FUNDAMENTAL_METRIC_DEFS (10개 지표)
+| ID | 이름 | 카테고리 |
+|----|------|---------|
+| `roe` | ROE | moat-bankruptcy |
+| `operating-margin` | 영업이익률 | moat-bankruptcy |
+| `interest-coverage` | 이자보상배율 | moat-bankruptcy |
+| `debt-ratio` | 부채비율 | moat-bankruptcy |
+| `operating-income-growth` | 영업이익증가율 | growth |
+| `revenue-growth` | 매출액증가율 | growth |
+| `fcf` | FCF | cash-generation |
+| `cash-conversion-cycle` | 현금순환주기 | cash-generation |
+| `retention-ratio` | 유보율 | dividend-capacity |
+| `asset-turnover` | 총자산회전율 | dividend-capacity |
+
+### DART/Yahoo Finance 재무 필드 (확장됨)
+기존 필드 외 추가된 필드:
+- **income**: `interestExpense` (이자비용)
+- **balance**: `accountsReceivable` (매출채권), `inventory` (재고자산), `accountsPayable` (매입채무)
+- **cashflow**: `dividendsPaid` (배당금지급)
+
+DART Provider는 aliases 배열 방식으로 기업별 계정과목명 변동을 처리한다.

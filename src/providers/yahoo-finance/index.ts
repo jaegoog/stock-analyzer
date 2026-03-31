@@ -6,31 +6,36 @@ import manifest from './manifest.json'
 // ─── 재무제표 필드 정의 ───────────────────────────────────────────────────────
 
 const INCOME_FIELDS = [
-  { field: 'totalRevenue', label: '매출액' },
-  { field: 'grossProfit', label: '매출총이익' },
-  { field: 'operatingExpense', label: '영업비용' },
-  { field: 'totalOperatingIncomeAsReported', label: '영업이익' },
-  { field: 'pretaxIncome', label: '세전이익' },
-  { field: 'netIncome', label: '당기순이익' },
-  { field: 'ebitda', label: 'EBITDA' },
+  { field: 'totalRevenue',                    label: '매출액' },
+  { field: 'grossProfit',                     label: '매출총이익' },
+  { field: 'operatingExpense',                label: '영업비용' },
+  { field: 'totalOperatingIncomeAsReported',  label: '영업이익' },
+  { field: 'interestExpense',                 label: '이자비용' },
+  { field: 'pretaxIncome',                    label: '세전이익' },
+  { field: 'netIncome',                       label: '당기순이익' },
+  { field: 'ebitda',                          label: 'EBITDA' },
 ]
 
 const BALANCE_FIELDS = [
-  { field: 'totalAssets', label: '총자산' },
-  { field: 'totalLiabilitiesNetMinorityInterest', label: '총부채' },
-  { field: 'totalEquityGrossMinorityInterest', label: '자기자본' },
-  { field: 'cashAndCashEquivalents', label: '현금및현금성자산' },
-  { field: 'currentAssets', label: '유동자산' },
-  { field: 'currentLiabilities', label: '유동부채' },
-  { field: 'longTermDebt', label: '장기부채' },
+  { field: 'totalAssets',                          label: '총자산' },
+  { field: 'totalLiabilitiesNetMinorityInterest',  label: '총부채' },
+  { field: 'totalEquityGrossMinorityInterest',     label: '자기자본' },
+  { field: 'cashAndCashEquivalents',               label: '현금및현금성자산' },
+  { field: 'currentAssets',                        label: '유동자산' },
+  { field: 'currentLiabilities',                   label: '유동부채' },
+  { field: 'longTermDebt',                         label: '장기부채' },
+  { field: 'accountsReceivable',                   label: '매출채권' },
+  { field: 'inventory',                            label: '재고자산' },
+  { field: 'accountsPayable',                      label: '매입채무' },
 ]
 
 const CASHFLOW_FIELDS = [
-  { field: 'operatingCashFlow', label: '영업활동현금흐름' },
-  { field: 'investingCashFlow', label: '투자활동현금흐름' },
-  { field: 'financingCashFlow', label: '재무활동현금흐름' },
-  { field: 'capitalExpenditure', label: '설비투자(CAPEX)' },
-  { field: 'freeCashFlow', label: '잉여현금흐름(FCF)' },
+  { field: 'operatingCashFlow',          label: '영업활동현금흐름' },
+  { field: 'investingCashFlow',          label: '투자활동현금흐름' },
+  { field: 'financingCashFlow',          label: '재무활동현금흐름' },
+  { field: 'capitalExpenditure',         label: '설비투자(CAPEX)' },
+  { field: 'freeCashFlow',               label: '잉여현금흐름(FCF)' },
+  { field: 'commonStockDividendPaid',    label: '배당금지급' },
 ]
 
 type TimeSeriesRow = Record<string, unknown> & { date?: Date }
@@ -81,6 +86,11 @@ const priceProvider: PriceProvider = {
       change: (quote.regularMarketChange as number) ?? 0,
       changePercent: (quote.regularMarketChangePercent as number) ?? 0,
       marketCap: (quote.marketCap as number) ?? null,
+      sharesOutstanding: (() => {
+        const raw = (quote.sharesOutstanding ?? quote.impliedSharesOutstanding) as number | undefined
+        if (raw == null || !Number.isFinite(raw) || raw <= 0) return null
+        return raw
+      })(),
       pe: (quote.trailingPE as number) ?? null,
       high52: (quote.fiftyTwoWeekHigh as number) ?? null,
       low52: (quote.fiftyTwoWeekLow as number) ?? null,

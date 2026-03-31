@@ -34,7 +34,7 @@
     },
     {
       "id": "fred",
-      "enabled": false,
+      "enabled": true,
       "priority": {
         "US:macro": 0,
         "GLOBAL:macro": 0

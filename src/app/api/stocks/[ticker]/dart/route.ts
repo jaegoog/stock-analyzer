@@ -4,33 +4,47 @@ import type { FinancialData, FinancialStatement } from '@/types'
 
 const DART_BASE = 'https://opendart.fss.or.kr/api'
 
-// ─── 계정과목 매핑 ────────────────────────────────────────────────────────────
+// ─── 계정과목 매핑 (aliases 방식: 기업마다 다른 계정과목명 대응) ──────────────
 
-const INCOME_FIELDS: Record<string, string> = {
-  '매출액': 'totalRevenue',
-  '영업이익': 'operatingIncome',
-  '법인세비용차감전순이익(손실)': 'pretaxIncome',
-  '당기순이익': 'netIncome',
-  '지배기업의소유주에게귀속되는당기순이익': 'netIncomeCommon',
-  'EBITDA': 'ebitda',
+interface FieldAlias {
+  /** DART account_nm에 매칭할 후보 문자열 목록 (공백/괄호 제거 후 비교) */
+  dartLabels: string[]
+  /** FinancialRow.field 값 */
+  field: string
+  /** UI 표시 라벨 */
+  label: string
 }
 
-const BALANCE_FIELDS: Record<string, string> = {
-  '자산총계': 'totalAssets',
-  '부채총계': 'totalLiab',
-  '자본총계': 'totalEquity',
-  '유동자산': 'totalCurrentAssets',
-  '유동부채': 'totalCurrentLiabilities',
-  '현금및현금성자산': 'cash',
-  '장기차입금': 'longTermDebt',
-}
+const INCOME_FIELD_ALIASES: FieldAlias[] = [
+  { dartLabels: ['매출액', '수익(매출액)'],                              field: 'totalRevenue',    label: '매출액' },
+  { dartLabels: ['영업이익', '영업이익(손실)'],                           field: 'operatingIncome', label: '영업이익' },
+  { dartLabels: ['이자비용', '금융원가', '이자비용(수익)'],                field: 'interestExpense', label: '이자비용' },
+  { dartLabels: ['법인세비용차감전순이익(손실)', '법인세차감전순이익'],      field: 'pretaxIncome',    label: '세전순이익' },
+  { dartLabels: ['당기순이익', '당기순이익(손실)'],                        field: 'netIncome',       label: '당기순이익' },
+  { dartLabels: ['지배기업의소유주에게귀속되는당기순이익'],                 field: 'netIncomeCommon', label: '지배주주순이익' },
+  { dartLabels: ['EBITDA'],                                              field: 'ebitda',          label: 'EBITDA' },
+]
 
-const CASHFLOW_FIELDS: Record<string, string> = {
-  '영업활동현금흐름': 'operatingCashFlow',
-  '투자활동현금흐름': 'investingCashFlow',
-  '재무활동현금흐름': 'financingCashFlow',
-  '유형자산의취득': 'capex',
-}
+const BALANCE_FIELD_ALIASES: FieldAlias[] = [
+  { dartLabels: ['자산총계'],                                            field: 'totalAssets',             label: '자산총계' },
+  { dartLabels: ['부채총계'],                                            field: 'totalLiab',               label: '부채총계' },
+  { dartLabels: ['자본총계'],                                            field: 'totalEquity',             label: '자본총계' },
+  { dartLabels: ['유동자산'],                                            field: 'totalCurrentAssets',      label: '유동자산' },
+  { dartLabels: ['유동부채'],                                            field: 'totalCurrentLiabilities', label: '유동부채' },
+  { dartLabels: ['현금및현금성자산'],                                     field: 'cash',                    label: '현금' },
+  { dartLabels: ['장기차입금'],                                          field: 'longTermDebt',            label: '장기차입금' },
+  { dartLabels: ['매출채권', '매출채권및기타채권', '매출채권및기타유동채권'], field: 'accountsReceivable',      label: '매출채권' },
+  { dartLabels: ['재고자산'],                                            field: 'inventory',               label: '재고자산' },
+  { dartLabels: ['매입채무', '매입채무및기타채무', '매입채무및기타유동채무'], field: 'accountsPayable',         label: '매입채무' },
+]
+
+const CASHFLOW_FIELD_ALIASES: FieldAlias[] = [
+  { dartLabels: ['영업활동현금흐름', '영업활동으로인한현금흐름'],           field: 'operatingCashFlow',  label: '영업활동현금흐름' },
+  { dartLabels: ['투자활동현금흐름', '투자활동으로인한현금흐름'],           field: 'investingCashFlow',  label: '투자활동현금흐름' },
+  { dartLabels: ['재무활동현금흐름', '재무활동으로인한현금흐름'],           field: 'financingCashFlow',  label: '재무활동현금흐름' },
+  { dartLabels: ['유형자산의취득', '유형자산취득'],                        field: 'capex',              label: '설비투자(CAPEX)' },
+  { dartLabels: ['배당금지급', '배당금의지급', '현금배당금지급'],           field: 'dividendsPaid',      label: '배당금지급' },
+]
 
 // ─── corp_code 조회 (ZIP 파싱) ────────────────────────────────────────────────
 
@@ -97,21 +111,24 @@ async function fetchDartFinancials(
 
 // ─── FinancialStatement 빌드 ─────────────────────────────────────────────────
 
+const normalize = (s: string) => s.replace(/[\s()（）]/g, '')
+
 function buildStatementFromDart(
   allYears: { year: string; data: Record<string, unknown>[] }[],
-  fieldMap: Record<string, string>,
+  aliases: FieldAlias[],
   type: 'income' | 'balance' | 'cashflow',
   period: 'annual' | 'quarterly'
 ): FinancialStatement {
   const years = allYears.map((y) => y.year)
 
-  const rows = Object.entries(fieldMap).map(([dartLabel, field]) => ({
+  const rows = aliases.map(({ dartLabels, field, label }) => ({
     field,
-    label: dartLabel,
+    label,
     values: allYears.map(({ data }) => {
-      const item = data.find(
-        (d) => String(d.account_nm ?? '').replace(/[\s()（）]/g, '') === dartLabel.replace(/[\s()（）]/g, '')
-      )
+      const item = data.find((d) => {
+        const nm = normalize(String(d.account_nm ?? ''))
+        return dartLabels.some((candidate) => nm === normalize(candidate))
+      })
       if (!item) return null
       const raw = String(item.thstrm_amount ?? '').replace(/,/g, '').trim()
       const n = parseInt(raw, 10)
@@ -168,14 +185,14 @@ export async function GET(
     ticker: symbol,
     market: 'KR',
     annual: {
-      income: buildStatementFromDart(annualData, INCOME_FIELDS, 'income', 'annual'),
-      balance: buildStatementFromDart(annualData, BALANCE_FIELDS, 'balance', 'annual'),
-      cashflow: buildStatementFromDart(annualData, CASHFLOW_FIELDS, 'cashflow', 'annual'),
+      income: buildStatementFromDart(annualData, INCOME_FIELD_ALIASES, 'income', 'annual'),
+      balance: buildStatementFromDart(annualData, BALANCE_FIELD_ALIASES, 'balance', 'annual'),
+      cashflow: buildStatementFromDart(annualData, CASHFLOW_FIELD_ALIASES, 'cashflow', 'annual'),
     },
     quarterly: {
-      income: buildStatementFromDart(quarterlyData, INCOME_FIELDS, 'income', 'quarterly'),
-      balance: buildStatementFromDart(quarterlyData, BALANCE_FIELDS, 'balance', 'quarterly'),
-      cashflow: buildStatementFromDart(quarterlyData, CASHFLOW_FIELDS, 'cashflow', 'quarterly'),
+      income: buildStatementFromDart(quarterlyData, INCOME_FIELD_ALIASES, 'income', 'quarterly'),
+      balance: buildStatementFromDart(quarterlyData, BALANCE_FIELD_ALIASES, 'balance', 'quarterly'),
+      cashflow: buildStatementFromDart(quarterlyData, CASHFLOW_FIELD_ALIASES, 'cashflow', 'quarterly'),
     },
   }
 
