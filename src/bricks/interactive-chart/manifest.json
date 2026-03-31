@@ -1,0 +1,11 @@
+{
+  "id": "interactive-chart",
+  "name": "재무 차트",
+  "description": "재무 지표를 Bar/Line/Area 인터랙티브 차트로 시각화",
+  "version": "1.0.0",
+  "author": "system",
+  "category": "chart",
+  "dataRequired": ["financials"],
+  "enabled": true,
+  "createdAt": "2026-03-31"
+}

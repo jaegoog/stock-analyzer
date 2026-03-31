@@ -1,0 +1,295 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Project Setup and Dependencies Installation",
+        "description": "Install all required npm packages and configure environment variables for the stock analysis application",
+        "details": "Install dependencies:\n- yahoo-finance2 (stock data for US/KR markets)\n- @anthropic-ai/sdk (Claude API for Brick generation)\n- recharts (interactive charts)\n- cheerio (web scraping for Naver Finance)\n- html2canvas (chart export)\n- @radix-ui/react-* packages for shadcn/ui base components\n- lucide-react (icons)\n- zod (validation)\n- clsx + tailwind-merge (className utility)\n\nCreate .env.local with:\nANTHROPIC_API_KEY=\nDART_API_KEY=\nFINNHUB_API_KEY=\n\nCreate .env.example template for documentation.\n\nInstall commands:\nnpm install yahoo-finance2 @anthropic-ai/sdk recharts cheerio html2canvas\nnpm install @radix-ui/react-dialog @radix-ui/react-dropdown-menu @radix-ui/react-tabs @radix-ui/react-switch @radix-ui/react-toast lucide-react\nnpm install zod clsx tailwind-merge",
+        "testStrategy": "Verify all packages appear in package.json dependencies. Run npm install without errors. Check .env.local exists with placeholder keys.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.434Z"
+      },
+      {
+        "id": "2",
+        "title": "TypeScript Interfaces and Types",
+        "description": "Define core TypeScript interfaces for Brick architecture, financial data, and stock information",
+        "details": "Create src/types/index.ts with:\n\ninterface BrickManifest {\n  id: string\n  name: string\n  description: string\n  version: string\n  author: 'system' | 'ai-agent' | 'user'\n  category: 'calculation' | 'chart' | 'research' | 'table' | 'alert'\n  dataRequired: string[]\n  enabled: boolean\n  createdAt: string\n}\n\ninterface BrickModule {\n  manifest: BrickManifest\n  Component: React.ComponentType<BrickProps>\n}\n\ninterface BrickProps {\n  ticker: string\n  market: 'KR' | 'US'\n  data?: Record<string, unknown>\n}\n\ninterface RegistryEntry {\n  id: string\n  enabled: boolean\n  order: number\n}\n\ninterface Registry {\n  bricks: RegistryEntry[]\n}\n\ninterface StockQuote {\n  ticker: string\n  price: number\n  change: number\n  changePercent: number\n  marketCap: number\n  pe: number\n  high52: number\n  low52: number\n  volume: number\n  sector: string\n  industry: string\n}\n\ninterface FinancialData {\n  period: 'annual' | 'quarterly'\n  statements: {\n    incomeStatement: Record<string, number>[]\n    balanceSheet: Record<string, number>[]\n    cashFlow: Record<string, number>[]\n  }\n}\n\ninterface NewsArticle {\n  date: string\n  headline: string\n  source: string\n  url: string\n  sentiment?: 'positive' | 'negative' | 'neutral'\n}\n\nExport all interfaces.",
+        "testStrategy": "TypeScript compiles without errors. Import types in a test file to verify exports work correctly.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.567Z"
+      },
+      {
+        "id": "3",
+        "title": "Brick Registry Infrastructure",
+        "description": "Create the Brick registry system with directory structure and registry.json management utilities",
+        "details": "Create src/bricks/ directory structure:\n- src/bricks/registry.json (initial empty { \"bricks\": [] })\n- src/lib/brick-registry.ts with utility functions:\n\nexport async function loadRegistry(): Promise<Registry> {\n  const path = join(process.cwd(), 'src/bricks/registry.json')\n  const data = await fs.readFile(path, 'utf-8')\n  return JSON.parse(data)\n}\n\nexport async function updateRegistry(registry: Registry): Promise<void> {\n  const path = join(process.cwd(), 'src/bricks/registry.json')\n  await fs.writeFile(path, JSON.stringify(registry, null, 2))\n}\n\nexport async function addBrickToRegistry(brickId: string): Promise<void> {\n  const registry = await loadRegistry()\n  const maxOrder = Math.max(...registry.bricks.map(b => b.order), -1)\n  registry.bricks.push({ id: brickId, enabled: true, order: maxOrder + 1 })\n  await updateRegistry(registry)\n}\n\nexport async function removeBrickFromRegistry(brickId: string): Promise<void> {\n  const registry = await loadRegistry()\n  registry.bricks = registry.bricks.filter(b => b.id !== brickId)\n  await updateRegistry(registry)\n}\n\nexport async function toggleBrickEnabled(brickId: string, enabled: boolean): Promise<void> {\n  const registry = await loadRegistry()\n  const brick = registry.bricks.find(b => b.id === brickId)\n  if (brick) brick.enabled = enabled\n  await updateRegistry(registry)\n}\n\nCreate src/lib/brick-loader.ts for dynamic Brick loading:\nexport async function loadBrick(brickId: string): Promise<BrickModule> {\n  const manifestPath = join(process.cwd(), `src/bricks/${brickId}/manifest.json`)\n  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'))\n  const Component = (await import(`@/bricks/${brickId}`)).default\n  return { manifest, Component }\n}",
+        "testStrategy": "Create registry.json, call loadRegistry() and verify it returns empty array. Add a test entry, call updateRegistry(), read file to verify JSON is written correctly.",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.603Z"
+      },
+      {
+        "id": "4",
+        "title": "shadcn/ui Component Setup",
+        "description": "Initialize shadcn/ui and install required UI components (Button, Input, Card, Tabs, Dialog, Switch, Toast)",
+        "details": "Run shadcn/ui init:\nnpx shadcn@latest init -d\n\nWhen prompted, select:\n- Style: Default\n- Base color: Slate\n- CSS variables: Yes\n\nAdd components:\nnpx shadcn@latest add button\nnpx shadcn@latest add input\nnpx shadcn@latest add card\nnpx shadcn@latest add tabs\nnpx shadcn@latest add dialog\nnpx shadcn@latest add switch\nnpx shadcn@latest add toast\nnpx shadcn@latest add skeleton\nnpx shadcn@latest add badge\nnpx shadcn@latest add dropdown-menu\n\nThis will create src/components/ui/ with all base components.\n\nCreate src/lib/utils.ts if not already present:\nimport { clsx, type ClassValue } from \"clsx\"\nimport { twMerge } from \"tailwind-merge\"\n\nexport function cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs))\n}",
+        "testStrategy": "Verify src/components/ui/ directory exists with all component files. Import Button in a test component and verify it renders without errors.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.648Z"
+      },
+      {
+        "id": "5",
+        "title": "Stock Search API Route",
+        "description": "Implement GET /api/stocks/search endpoint using yahoo-finance2 for ticker and company name search",
+        "details": "Create src/app/api/stocks/search/route.ts:\n\nimport { NextRequest, NextResponse } from 'next/server'\nimport yahooFinance from 'yahoo-finance2'\n\nexport async function GET(request: NextRequest) {\n  try {\n    const query = request.nextUrl.searchParams.get('q')\n    if (!query) {\n      return NextResponse.json({ error: 'Query parameter required' }, { status: 400 })\n    }\n\n    // Auto-detect KR tickers (6-digit numeric = KRX stock)\n    let searchQuery = query\n    if (/^\\d{6}$/.test(query)) {\n      // Try .KS first (KOSPI), fallback to .KQ (KOSDAQ)\n      searchQuery = `${query}.KS`\n    }\n\n    const results = await yahooFinance.search(searchQuery)\n    \n    const formatted = results.quotes.map(q => ({\n      ticker: q.symbol,\n      name: q.shortname || q.longname,\n      exchange: q.exchange,\n      type: q.quoteType\n    }))\n\n    return NextResponse.json(formatted)\n  } catch (error) {\n    console.error('Search error:', error)\n    return NextResponse.json({ error: 'Search failed' }, { status: 500 })\n  }\n}",
+        "testStrategy": "Test endpoint with curl or Postman: GET /api/stocks/search?q=AAPL (should return Apple), GET /api/stocks/search?q=005930 (should return Samsung with .KS suffix). Verify response format matches interface.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.684Z"
+      },
+      {
+        "id": "6",
+        "title": "Stock Quote API Route",
+        "description": "Implement GET /api/stocks/[ticker] endpoint to fetch real-time stock quotes with all required fields",
+        "details": "Create src/app/api/stocks/[ticker]/route.ts:\n\nimport { NextRequest, NextResponse } from 'next/server'\nimport yahooFinance from 'yahoo-finance2'\n\nexport async function GET(\n  request: NextRequest,\n  { params }: { params: Promise<{ ticker: string }> }\n) {\n  try {\n    const { ticker } = await params\n    \n    const quote = await yahooFinance.quote(ticker)\n    \n    const response = {\n      ticker: quote.symbol,\n      price: quote.regularMarketPrice,\n      change: quote.regularMarketChange,\n      changePercent: quote.regularMarketChangePercent,\n      marketCap: quote.marketCap,\n      pe: quote.trailingPE,\n      high52: quote.fiftyTwoWeekHigh,\n      low52: quote.fiftyTwoWeekLow,\n      volume: quote.regularMarketVolume,\n      sector: quote.sector || 'N/A',\n      industry: quote.industry || 'N/A',\n      currency: quote.currency,\n      name: quote.shortName || quote.longName\n    }\n\n    return NextResponse.json(response)\n  } catch (error) {\n    console.error('Quote fetch error:', error)\n    return NextResponse.json({ error: 'Failed to fetch quote' }, { status: 500 })\n  }\n}",
+        "testStrategy": "Test with GET /api/stocks/AAPL and GET /api/stocks/005930.KS. Verify all required fields are present and properly typed. Check that KR stocks return KRW currency.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.726Z"
+      },
+      {
+        "id": "7",
+        "title": "Stock Financials API Routes (US + KR)",
+        "description": "Implement financial statements endpoints for both US stocks (yahoo-finance2) and Korean stocks (OpenDART API)",
+        "details": "Create src/app/api/stocks/[ticker]/financials/route.ts:\n\nimport { NextRequest, NextResponse } from 'next/server'\nimport yahooFinance from 'yahoo-finance2'\n\nexport async function GET(\n  request: NextRequest,\n  { params }: { params: Promise<{ ticker: string }> }\n) {\n  try {\n    const { ticker } = await params\n    const period = request.nextUrl.searchParams.get('period') || 'annual'\n    \n    const modules = period === 'annual' \n      ? ['incomeStatementHistory', 'balanceSheetHistory', 'cashflowStatementHistory']\n      : ['incomeStatementHistoryQuarterly', 'balanceSheetHistoryQuarterly', 'cashflowStatementHistoryQuarterly']\n    \n    const result = await yahooFinance.quoteSummary(ticker, { modules })\n    \n    return NextResponse.json({\n      period,\n      statements: {\n        incomeStatement: result.incomeStatementHistory?.incomeStatementHistory || [],\n        balanceSheet: result.balanceSheetHistory?.balanceSheetStatements || [],\n        cashFlow: result.cashflowStatementHistory?.cashflowStatements || []\n      }\n    })\n  } catch (error) {\n    console.error('Financials fetch error:', error)\n    return NextResponse.json({ error: 'Failed to fetch financials' }, { status: 500 })\n  }\n}\n\nCreate src/app/api/stocks/[ticker]/dart/route.ts:\n\nimport { NextRequest, NextResponse } from 'next/server'\n\nconst DART_API_KEY = process.env.DART_API_KEY\nconst DART_CORP_CODE_URL = 'https://opendart.fss.or.kr/api/corpCode.xml'\nconst DART_FINANCIAL_URL = 'https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json'\n\nasync function getCorpCode(ticker: string): Promise<string | null> {\n  // Implementation to fetch and parse corp_code from DART XML\n  // Cache corp codes in memory or file for performance\n  // Return 8-digit corp_code or null if not found\n  return null // Placeholder\n}\n\nexport async function GET(\n  request: NextRequest,\n  { params }: { params: Promise<{ ticker: string }> }\n) {\n  try {\n    const { ticker } = await params\n    const stockCode = ticker.replace(/\\.(KS|KQ)$/, '')\n    \n    const corpCode = await getCorpCode(stockCode)\n    if (!corpCode) {\n      return NextResponse.json({ error: 'Company not found in DART' }, { status: 404 })\n    }\n    \n    const year = new Date().getFullYear() - 1\n    const url = `${DART_FINANCIAL_URL}?crtfc_key=${DART_API_KEY}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=11011`\n    \n    const response = await fetch(url)\n    const data = await response.json()\n    \n    // Parse and normalize DART response to match FinancialData interface\n    return NextResponse.json(data)\n  } catch (error) {\n    console.error('DART fetch error:', error)\n    return NextResponse.json({ error: 'Failed to fetch DART data' }, { status: 500 })\n  }\n}",
+        "testStrategy": "Test US stock: GET /api/stocks/AAPL/financials?period=annual. Test KR stock: GET /api/stocks/005930.KS/dart with valid DART_API_KEY. Verify data structure matches FinancialData interface.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2",
+          "6"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.760Z"
+      },
+      {
+        "id": "8",
+        "title": "Stock News API Routes (US + KR)",
+        "description": "Implement news endpoints using Finnhub for US stocks and Naver Finance scraping for Korean stocks",
+        "details": "Create src/app/api/stocks/[ticker]/news/route.ts:\n\nimport { NextRequest, NextResponse } from 'next/server'\nimport * as cheerio from 'cheerio'\n\nconst FINNHUB_API_KEY = process.env.FINNHUB_API_KEY\n\nasync function fetchUSNews(ticker: string): Promise<NewsArticle[]> {\n  const to = new Date().toISOString().split('T')[0]\n  const from = new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0]\n  \n  const url = `https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${FINNHUB_API_KEY}`\n  const response = await fetch(url)\n  const data = await response.json()\n  \n  return data.map((item: any) => ({\n    date: new Date(item.datetime * 1000).toISOString(),\n    headline: item.headline,\n    source: item.source,\n    url: item.url,\n    sentiment: item.sentiment // Basic sentiment from Finnhub\n  }))\n}\n\nasync function fetchKRNews(ticker: string): Promise<NewsArticle[]> {\n  const stockCode = ticker.replace(/\\.(KS|KQ)$/, '')\n  const url = `https://finance.naver.com/item/news_news.naver?code=${stockCode}`\n  \n  const response = await fetch(url)\n  const html = await response.text()\n  const $ = cheerio.load(html)\n  \n  const articles: NewsArticle[] = []\n  $('.title').each((_, elem) => {\n    const headline = $(elem).text().trim()\n    const url = $(elem).find('a').attr('href')\n    const date = $(elem).closest('tr').find('.date').text()\n    \n    if (headline && url) {\n      articles.push({\n        date,\n        headline,\n        source: 'Naver Finance',\n        url: `https://finance.naver.com${url}`,\n        sentiment: undefined // Basic keyword sentiment could be added\n      })\n    }\n  })\n  \n  return articles\n}\n\nexport async function GET(\n  request: NextRequest,\n  { params }: { params: Promise<{ ticker: string }> }\n) {\n  try {\n    const { ticker } = await params\n    const isKRStock = ticker.includes('.KS') || ticker.includes('.KQ')\n    \n    const articles = isKRStock \n      ? await fetchKRNews(ticker)\n      : await fetchUSNews(ticker.replace(/\\.(KS|KQ)$/, ''))\n    \n    return NextResponse.json(articles)\n  } catch (error) {\n    console.error('News fetch error:', error)\n    return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 })\n  }\n}",
+        "testStrategy": "Test US: GET /api/stocks/AAPL/news (verify Finnhub integration). Test KR: GET /api/stocks/005930.KS/news (verify Naver scraping works). Check that articles include date, headline, source, url.",
+        "priority": "medium",
+        "dependencies": [
+          "1",
+          "2",
+          "6"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:38:57.799Z"
+      },
+      {
+        "id": "9",
+        "title": "Home Page with Stock Search",
+        "description": "Build the home page (/) with centered search bar, recent searches from localStorage, and market index summary",
+        "details": "Create src/components/stock-search.tsx:\n- Debounced search input (300ms delay)\n- Calls /api/stocks/search on input change\n- Dropdown showing results with ticker, name, exchange\n- Click navigates to /stock/[ticker]\n- Stores recent searches in localStorage 'recent-searches' (max 5)\n\nCreate src/components/market-summary.tsx:\n- Displays 4 cards: KOSPI (^KS11), KOSDAQ (^KQ11), S&P 500 (^GSPC), NASDAQ (^IXIC)\n- Each card shows: index value, change, changePercent\n- Fetches from /api/stocks/[ticker] for each index\n- Auto-refresh every 60 seconds\n- Use <Card> from shadcn/ui\n\nUpdate src/app/page.tsx:\nexport default function HomePage() {\n  return (\n    <div className=\"min-h-screen bg-slate-50 dark:bg-slate-900\">\n      <div className=\"container mx-auto px-4 py-16\">\n        <h1 className=\"text-4xl font-bold text-center mb-8\">Stock Analysis Tool</h1>\n        <div className=\"max-w-2xl mx-auto mb-12\">\n          <StockSearch />\n        </div>\n        <MarketSummary />\n      </div>\n    </div>\n  )\n}",
+        "testStrategy": "Navigate to /. Type 'AAPL' in search, verify dropdown appears. Click result, verify navigation to /stock/AAPL. Refresh page, verify recent searches persist. Check that market indices load and display correctly.",
+        "priority": "high",
+        "dependencies": [
+          "4",
+          "5"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.398Z"
+      },
+      {
+        "id": "10",
+        "title": "Stock Detail Page Layout and Overview Card",
+        "description": "Create stock detail page with 2-column layout and StockOverview component showing real-time quote data",
+        "details": "Create src/app/stock/[ticker]/page.tsx:\nexport default async function StockPage({ params }: { params: Promise<{ ticker: string }> }) {\n  const { ticker } = await params\n  \n  return (\n    <div className=\"min-h-screen bg-slate-50 dark:bg-slate-900\">\n      <div className=\"container mx-auto px-4 py-8\">\n        <div className=\"grid grid-cols-1 lg:grid-cols-4 gap-6\">\n          <div className=\"lg:col-span-3\">\n            <StockOverview ticker={ticker} />\n            <BrickRenderer ticker={ticker} />\n          </div>\n          <div className=\"lg:col-span-1\">\n            <AgentPrompt ticker={ticker} />\n            <BrickManager />\n          </div>\n        </div>\n      </div>\n    </div>\n  )\n}\n\nCreate src/components/stock-overview.tsx:\n'use client'\nimport { useEffect, useState } from 'react'\nimport { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'\n\nexport function StockOverview({ ticker }: { ticker: string }) {\n  const [quote, setQuote] = useState<StockQuote | null>(null)\n  const [loading, setLoading] = useState(true)\n  \n  useEffect(() => {\n    async function fetchQuote() {\n      const res = await fetch(`/api/stocks/${ticker}`)\n      const data = await res.json()\n      setQuote(data)\n      setLoading(false)\n    }\n    \n    fetchQuote()\n    const interval = setInterval(fetchQuote, 60000) // Auto-refresh every 60s\n    return () => clearInterval(interval)\n  }, [ticker])\n  \n  if (loading) return <Skeleton className=\"h-40\" />\n  if (!quote) return <div>Failed to load</div>\n  \n  return (\n    <Card className=\"mb-6\">\n      <CardHeader>\n        <CardTitle>{quote.name} ({quote.ticker})</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <div className=\"grid grid-cols-2 md:grid-cols-4 gap-4\">\n          <div>\n            <p className=\"text-sm text-muted-foreground\">Price</p>\n            <p className=\"text-2xl font-bold\">${quote.price.toFixed(2)}</p>\n            <p className={quote.change >= 0 ? 'text-green-600' : 'text-red-600'}>\n              {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.changePercent.toFixed(2)}%)\n            </p>\n          </div>\n          <div>\n            <p className=\"text-sm text-muted-foreground\">Market Cap</p>\n            <p className=\"text-lg\">{formatLargeNumber(quote.marketCap)}</p>\n          </div>\n          <div>\n            <p className=\"text-sm text-muted-foreground\">P/E Ratio</p>\n            <p className=\"text-lg\">{quote.pe?.toFixed(2) || 'N/A'}</p>\n          </div>\n          <div>\n            <p className=\"text-sm text-muted-foreground\">52W Range</p>\n            <p className=\"text-sm\">{quote.low52.toFixed(2)} - {quote.high52.toFixed(2)}</p>\n          </div>\n        </div>\n      </CardContent>\n    </Card>\n  )\n}",
+        "testStrategy": "Navigate to /stock/AAPL. Verify StockOverview card displays with price, change, market cap, P/E, 52W range. Wait 60 seconds, verify data refreshes automatically. Test with Korean stock /stock/005930.KS.",
+        "priority": "high",
+        "dependencies": [
+          "4",
+          "6",
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.441Z"
+      },
+      {
+        "id": "11",
+        "title": "Brick Renderer Component",
+        "description": "Create BrickRenderer component that dynamically loads and displays all enabled Bricks from registry in order",
+        "details": "Create src/components/brick-renderer.tsx:\n'use client'\nimport { useEffect, useState } from 'react'\nimport { loadRegistry } from '@/lib/brick-registry'\nimport { ErrorBoundary } from 'react-error-boundary'\n\nfunction BrickErrorFallback({ error, brickId }: { error: Error; brickId: string }) {\n  return (\n    <Card className=\"border-red-500\">\n      <CardHeader>\n        <CardTitle className=\"text-red-600\">Brick Error: {brickId}</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <p>{error.message}</p>\n      </CardContent>\n    </Card>\n  )\n}\n\nexport function BrickRenderer({ ticker }: { ticker: string }) {\n  const [bricks, setBricks] = useState<BrickModule[]>([])\n  const [loading, setLoading] = useState(true)\n  const market = ticker.includes('.KS') || ticker.includes('.KQ') ? 'KR' : 'US'\n  \n  useEffect(() => {\n    async function loadBricks() {\n      const registry = await fetch('/api/bricks/registry').then(r => r.json())\n      const enabledBricks = registry.bricks\n        .filter((b: RegistryEntry) => b.enabled)\n        .sort((a: RegistryEntry, b: RegistryEntry) => a.order - b.order)\n      \n      const modules = await Promise.all(\n        enabledBricks.map(async (entry: RegistryEntry) => {\n          try {\n            const brick = await import(`@/bricks/${entry.id}`)\n            return brick.default\n          } catch (error) {\n            console.error(`Failed to load brick ${entry.id}:`, error)\n            return null\n          }\n        })\n      )\n      \n      setBricks(modules.filter(Boolean))\n      setLoading(false)\n    }\n    \n    loadBricks()\n  }, [ticker])\n  \n  if (loading) return <div>Loading bricks...</div>\n  \n  return (\n    <div className=\"space-y-6\">\n      {bricks.map((brick, index) => (\n        <ErrorBoundary\n          key={brick.manifest.id}\n          fallbackRender={({ error }) => <BrickErrorFallback error={error} brickId={brick.manifest.id} />}\n        >\n          <brick.Component ticker={ticker} market={market} />\n        </ErrorBoundary>\n      ))}\n    </div>\n  )\n}",
+        "testStrategy": "Create a test Brick, add it to registry.json with enabled:true. Navigate to stock page, verify Brick renders. Set enabled:false, refresh page, verify Brick doesn't render. Throw error in Brick component, verify ErrorBoundary catches it without crashing page.",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "4",
+          "10"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.473Z"
+      },
+      {
+        "id": "12",
+        "title": "Financial Statements System Brick",
+        "description": "Implement the financial-statements Brick with tabs for Income Statement, Balance Sheet, and Cash Flow with customizable fields",
+        "details": "Create src/bricks/financial-statements/manifest.json:\n{\n  \"id\": \"financial-statements\",\n  \"name\": \"재무제표\",\n  \"description\": \"손익계산서, 재무상태표, 현금흐름표\",\n  \"version\": \"1.0.0\",\n  \"author\": \"system\",\n  \"category\": \"table\",\n  \"dataRequired\": [\"financials\"],\n  \"enabled\": true,\n  \"createdAt\": \"2026-03-31\"\n}\n\nCreate src/bricks/financial-statements/default-fields.json:\n{\n  \"incomeStatement\": [\"totalRevenue\", \"costOfRevenue\", \"grossProfit\", \"operatingIncome\", \"netIncome\", \"ebitda\"],\n  \"balanceSheet\": [\"totalAssets\", \"totalLiabilities\", \"totalStockholderEquity\", \"cash\", \"totalDebt\"],\n  \"cashFlow\": [\"totalCashFromOperatingActivities\", \"capitalExpenditures\", \"freeCashFlow\"]\n}\n\nCreate src/bricks/financial-statements/component.tsx:\n'use client'\nimport { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'\nimport { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'\n\nexport default function FinancialStatementsBrick({ ticker, market }: BrickProps) {\n  const [period, setPeriod] = useState<'annual' | 'quarterly'>('annual')\n  const [data, setData] = useState<FinancialData | null>(null)\n  const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({})\n  \n  useEffect(() => {\n    // Load visible fields from localStorage\n    const saved = localStorage.getItem(`financial-fields-${ticker}`)\n    if (saved) setVisibleFields(JSON.parse(saved))\n  }, [ticker])\n  \n  useEffect(() => {\n    async function fetchData() {\n      const endpoint = market === 'KR' \n        ? `/api/stocks/${ticker}/dart`\n        : `/api/stocks/${ticker}/financials?period=${period}`\n      const res = await fetch(endpoint)\n      const data = await res.json()\n      setData(data)\n    }\n    fetchData()\n  }, [ticker, market, period])\n  \n  // Implement field checkbox UI, table rendering with formatNumber for KR (억/조) and US (billions)\n  // Include Annual/Quarterly toggle for period\n  // Save visibleFields to localStorage on change\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>재무제표</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <Tabs defaultValue=\"income\">\n          <TabsList>\n            <TabsTrigger value=\"income\">Income Statement</TabsTrigger>\n            <TabsTrigger value=\"balance\">Balance Sheet</TabsTrigger>\n            <TabsTrigger value=\"cashflow\">Cash Flow</TabsTrigger>\n          </TabsList>\n          {/* Tab content implementation */}\n        </Tabs>\n      </CardContent>\n    </Card>\n  )\n}\n\nCreate src/bricks/financial-statements/index.ts:\nimport Component from './component'\nimport manifest from './manifest.json'\nexport default { Component, manifest }",
+        "testStrategy": "Navigate to stock page, verify Financial Statements Brick renders with 3 tabs. Toggle Annual/Quarterly, verify data refetches. Check/uncheck field visibility, refresh page, verify settings persist. Test both US and KR stocks.",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "4",
+          "7",
+          "11"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.518Z"
+      },
+      {
+        "id": "13",
+        "title": "Interactive Chart System Brick",
+        "description": "Build interactive-chart Brick using Recharts with zoom, hover tooltips, multi-series comparison, and PNG export",
+        "details": "Create src/bricks/interactive-chart/manifest.json:\n{\n  \"id\": \"interactive-chart\",\n  \"name\": \"인터랙티브 차트\",\n  \"description\": \"재무 지표를 시각화하고 비교합니다\",\n  \"version\": \"1.0.0\",\n  \"author\": \"system\",\n  \"category\": \"chart\",\n  \"dataRequired\": [\"financials\"],\n  \"enabled\": true,\n  \"createdAt\": \"2026-03-31\"\n}\n\nCreate src/bricks/interactive-chart/component.tsx:\n'use client'\nimport { useState, useRef } from 'react'\nimport { BarChart, LineChart, AreaChart, Bar, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'\nimport { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'\nimport { Button } from '@/components/ui/button'\nimport html2canvas from 'html2canvas'\n\nconst AVAILABLE_METRICS = [\n  { key: 'totalRevenue', label: 'Revenue' },\n  { key: 'operatingIncome', label: 'Operating Income' },\n  { key: 'netIncome', label: 'Net Income' },\n  { key: 'grossProfit', label: 'Gross Profit' },\n  { key: 'ebitda', label: 'EBITDA' }\n]\n\nexport default function InteractiveChartBrick({ ticker, market }: BrickProps) {\n  const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar')\n  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['totalRevenue'])\n  const [timeRange, setTimeRange] = useState<'3Y' | '5Y' | '10Y' | 'All'>('5Y')\n  const [zoomDomain, setZoomDomain] = useState<[number, number] | null>(null)\n  const chartRef = useRef<HTMLDivElement>(null)\n  \n  // Fetch financial data and transform to chart format\n  // Implement metric selector dropdown (max 3 metrics)\n  // Chart type toggle buttons (Bar, Line, Area)\n  // Time range filter buttons\n  // Zoom by drag on chart area\n  // Reset zoom button\n  \n  const handleExportPNG = async () => {\n    if (chartRef.current) {\n      const canvas = await html2canvas(chartRef.current)\n      const url = canvas.toDataURL('image/png')\n      const link = document.createElement('a')\n      link.download = `${ticker}-chart.png`\n      link.href = url\n      link.click()\n    }\n  }\n  \n  const ChartComponent = chartType === 'bar' ? BarChart : chartType === 'line' ? LineChart : AreaChart\n  const DataComponent = chartType === 'bar' ? Bar : chartType === 'line' ? Line : Area\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>인터랙티브 차트</CardTitle>\n        <div className=\"flex gap-2\">\n          <Button onClick={() => setChartType('bar')}>Bar</Button>\n          <Button onClick={() => setChartType('line')}>Line</Button>\n          <Button onClick={() => setChartType('area')}>Area</Button>\n          <Button onClick={handleExportPNG}>Export PNG</Button>\n          {zoomDomain && <Button onClick={() => setZoomDomain(null)}>Reset Zoom</Button>}\n        </div>\n      </CardHeader>\n      <CardContent>\n        <div ref={chartRef}>\n          <ResponsiveContainer width=\"100%\" height={400}>\n            <ChartComponent data={chartData}>\n              <CartesianGrid strokeDasharray=\"3 3\" />\n              <XAxis dataKey=\"period\" />\n              <YAxis />\n              <Tooltip />\n              <Legend />\n              {selectedMetrics.map((metric, index) => (\n                <DataComponent\n                  key={metric}\n                  dataKey={metric}\n                  fill={COLORS[index]}\n                  stroke={COLORS[index]}\n                />\n              ))}\n            </ChartComponent>\n          </ResponsiveContainer>\n        </div>\n      </CardContent>\n    </Card>\n  )\n}\n\nCreate src/bricks/interactive-chart/index.ts",
+        "testStrategy": "Navigate to stock page, verify chart renders. Select different metrics, verify chart updates. Toggle chart types (Bar/Line/Area), verify rendering. Drag to zoom on chart, verify zoom works. Click Reset Zoom, verify returns to full view. Click Export PNG, verify image downloads.",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "4",
+          "7",
+          "11"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.555Z"
+      },
+      {
+        "id": "14",
+        "title": "Metrics Calculator System Brick",
+        "description": "Implement metrics-calculator Brick with built-in metrics (PER, EPS, PBR, ROE, Debt Ratio, Current Ratio) and custom formula support",
+        "details": "Create src/bricks/metrics-calculator/manifest.json:\n{\n  \"id\": \"metrics-calculator\",\n  \"name\": \"지표 계산기\",\n  \"description\": \"재무 지표를 자동으로 계산합니다\",\n  \"version\": \"1.0.0\",\n  \"author\": \"system\",\n  \"category\": \"calculation\",\n  \"dataRequired\": [\"quote\", \"financials\"],\n  \"enabled\": true,\n  \"createdAt\": \"2026-03-31\"\n}\n\nCreate src/bricks/metrics-calculator/custom-metrics.json:\n[]\n\nCreate src/bricks/metrics-calculator/calculations.ts:\nexport const builtInMetrics = {\n  PER: (data: any) => data.price / data.eps,\n  EPS: (data: any) => data.netIncome / data.sharesOutstanding,\n  PBR: (data: any) => data.price / (data.totalEquity / data.sharesOutstanding),\n  ROE: (data: any) => (data.netIncome / data.totalEquity) * 100,\n  DebtRatio: (data: any) => (data.totalDebt / data.totalAssets) * 100,\n  CurrentRatio: (data: any) => data.currentAssets / data.currentLiabilities\n}\n\nexport function evaluateFormula(formula: string, data: Record<string, number>): number {\n  // Safe formula evaluation using Function constructor with data context\n  // Only allow mathematical operations and data field references\n  // No eval() for security\n  try {\n    const func = new Function(...Object.keys(data), `return ${formula}`)\n    return func(...Object.values(data))\n  } catch (error) {\n    throw new Error('Invalid formula')\n  }\n}\n\nCreate src/bricks/metrics-calculator/component.tsx:\n'use client'\nimport { useState, useEffect } from 'react'\nimport { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'\nimport { Button } from '@/components/ui/button'\nimport { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'\nimport { Input } from '@/components/ui/input'\n\nexport default function MetricsCalculatorBrick({ ticker, market }: BrickProps) {\n  const [customMetrics, setCustomMetrics] = useState<any[]>([])\n  const [financialData, setFinancialData] = useState<any>(null)\n  const [quoteData, setQuoteData] = useState<any>(null)\n  \n  useEffect(() => {\n    // Fetch quote and financial data\n    // Load custom metrics from JSON file via API\n  }, [ticker])\n  \n  const handleAddMetric = async (name: string, formula: string, description: string) => {\n    const newMetric = { name, formula, description }\n    // POST to API to save to custom-metrics.json\n    // Update local state\n  }\n  \n  const handleDeleteMetric = async (name: string) => {\n    // DELETE from custom-metrics.json via API\n  }\n  \n  const calculateMetrics = () => {\n    const data = { ...quoteData, ...financialData }\n    const results: Record<string, number> = {}\n    \n    // Calculate built-in metrics\n    Object.entries(builtInMetrics).forEach(([name, fn]) => {\n      try {\n        results[name] = fn(data)\n      } catch (error) {\n        results[name] = NaN\n      }\n    })\n    \n    // Calculate custom metrics\n    customMetrics.forEach(metric => {\n      try {\n        results[metric.name] = evaluateFormula(metric.formula, data)\n      } catch (error) {\n        results[metric.name] = NaN\n      }\n    })\n    \n    return results\n  }\n  \n  const metrics = calculateMetrics()\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>지표 계산기</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <div className=\"space-y-4\">\n          <div>\n            <h3 className=\"font-semibold mb-2\">Built-in Metrics</h3>\n            <div className=\"grid grid-cols-2 gap-2\">\n              {Object.entries(metrics).map(([name, value]) => (\n                <div key={name}>\n                  <span className=\"text-sm text-muted-foreground\">{name}:</span>\n                  <span className=\"ml-2 font-medium\">{isNaN(value) ? 'N/A' : value.toFixed(2)}</span>\n                </div>\n              ))}\n            </div>\n          </div>\n          \n          <div>\n            <h3 className=\"font-semibold mb-2\">Custom Metrics</h3>\n            <Dialog>\n              <DialogTrigger asChild>\n                <Button>Add Formula</Button>\n              </DialogTrigger>\n              <DialogContent>\n                <DialogHeader>\n                  <DialogTitle>Add Custom Metric</DialogTitle>\n                </DialogHeader>\n                {/* Form for name, formula, description */}\n              </DialogContent>\n            </Dialog>\n          </div>\n        </div>\n      </CardContent>\n    </Card>\n  )\n}\n\nCreate src/bricks/metrics-calculator/index.ts",
+        "testStrategy": "Navigate to stock page, verify built-in metrics calculate correctly using mock data. Click 'Add Formula', enter custom formula 'revenue * 0.2', verify it calculates. Delete custom metric, verify it's removed. Test formula validation with invalid syntax.",
+        "priority": "medium",
+        "dependencies": [
+          "3",
+          "4",
+          "6",
+          "7",
+          "11"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.594Z"
+      },
+      {
+        "id": "15",
+        "title": "News System Brick",
+        "description": "Create news Brick with All/Positive/Negative tabs, pagination, and sentiment filtering",
+        "details": "Create src/bricks/news/manifest.json:\n{\n  \"id\": \"news\",\n  \"name\": \"뉴스\",\n  \"description\": \"최신 뉴스 및 감성 분석\",\n  \"version\": \"1.0.0\",\n  \"author\": \"system\",\n  \"category\": \"research\",\n  \"dataRequired\": [\"news\"],\n  \"enabled\": true,\n  \"createdAt\": \"2026-03-31\"\n}\n\nCreate src/bricks/news/component.tsx:\n'use client'\nimport { useState, useEffect } from 'react'\nimport { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'\nimport { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'\nimport { Button } from '@/components/ui/button'\n\nfunction basicSentiment(headline: string): 'positive' | 'negative' | 'neutral' {\n  const positiveWords = ['up', 'gain', 'profit', 'growth', 'rise', '상승', '성장', '이익']\n  const negativeWords = ['down', 'loss', 'fall', 'decline', 'drop', '하락', '손실', '감소']\n  \n  const lower = headline.toLowerCase()\n  const hasPositive = positiveWords.some(w => lower.includes(w))\n  const hasNegative = negativeWords.some(w => lower.includes(w))\n  \n  if (hasPositive && !hasNegative) return 'positive'\n  if (hasNegative && !hasPositive) return 'negative'\n  return 'neutral'\n}\n\nexport default function NewsBrick({ ticker, market }: BrickProps) {\n  const [articles, setArticles] = useState<NewsArticle[]>([])\n  const [filter, setFilter] = useState<'all' | 'positive' | 'negative'>('all')\n  const [page, setPage] = useState(1)\n  const ITEMS_PER_PAGE = 10\n  \n  useEffect(() => {\n    async function fetchNews() {\n      const res = await fetch(`/api/stocks/${ticker}/news`)\n      const data = await res.json()\n      \n      // Apply basic sentiment if not provided\n      const withSentiment = data.map((article: NewsArticle) => ({\n        ...article,\n        sentiment: article.sentiment || basicSentiment(article.headline)\n      }))\n      \n      setArticles(withSentiment)\n    }\n    fetchNews()\n  }, [ticker])\n  \n  const filteredArticles = articles.filter(a => {\n    if (filter === 'all') return true\n    return a.sentiment === filter\n  })\n  \n  const paginatedArticles = filteredArticles.slice(\n    (page - 1) * ITEMS_PER_PAGE,\n    page * ITEMS_PER_PAGE\n  )\n  \n  const totalPages = Math.ceil(filteredArticles.length / ITEMS_PER_PAGE)\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>뉴스</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <Tabs value={filter} onValueChange={(v) => setFilter(v as any)}>\n          <TabsList>\n            <TabsTrigger value=\"all\">All</TabsTrigger>\n            <TabsTrigger value=\"positive\">Positive</TabsTrigger>\n            <TabsTrigger value=\"negative\">Negative</TabsTrigger>\n          </TabsList>\n        </Tabs>\n        \n        <div className=\"space-y-4 mt-4\">\n          {paginatedArticles.map((article, idx) => (\n            <div key={idx} className=\"border-b pb-3\">\n              <a href={article.url} target=\"_blank\" rel=\"noopener noreferrer\" className=\"hover:underline\">\n                <h4 className=\"font-medium\">{article.headline}</h4>\n              </a>\n              <p className=\"text-sm text-muted-foreground\">\n                {article.source} • {new Date(article.date).toLocaleDateString()}\n              </p>\n            </div>\n          ))}\n        </div>\n        \n        <div className=\"flex justify-between items-center mt-4\">\n          <Button\n            disabled={page === 1}\n            onClick={() => setPage(p => p - 1)}\n          >\n            Previous\n          </Button>\n          <span>Page {page} of {totalPages}</span>\n          <Button\n            disabled={page === totalPages}\n            onClick={() => setPage(p => p + 1)}\n          >\n            Next\n          </Button>\n        </div>\n      </CardContent>\n    </Card>\n  )\n}\n\nCreate src/bricks/news/index.ts",
+        "testStrategy": "Navigate to stock page, verify news Brick loads articles. Click Positive tab, verify only positive articles show. Click Negative tab, verify filtering works. Test pagination by clicking Next/Previous. Verify external links open in new tab.",
+        "priority": "medium",
+        "dependencies": [
+          "3",
+          "4",
+          "8",
+          "11"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.622Z"
+      },
+      {
+        "id": "16",
+        "title": "Brick Management API Routes",
+        "description": "Implement API routes for registry management: GET/PUT /api/bricks/registry, custom metrics CRUD endpoints",
+        "details": "Create src/app/api/bricks/registry/route.ts:\nimport { NextRequest, NextResponse } from 'next/server'\nimport { loadRegistry, updateRegistry, toggleBrickEnabled } from '@/lib/brick-registry'\n\nexport async function GET() {\n  try {\n    const registry = await loadRegistry()\n    return NextResponse.json(registry)\n  } catch (error) {\n    return NextResponse.json({ error: 'Failed to load registry' }, { status: 500 })\n  }\n}\n\nexport async function PUT(request: NextRequest) {\n  try {\n    const { brickId, enabled, order } = await request.json()\n    \n    if (enabled !== undefined) {\n      await toggleBrickEnabled(brickId, enabled)\n    }\n    \n    if (order !== undefined) {\n      const registry = await loadRegistry()\n      const brick = registry.bricks.find(b => b.id === brickId)\n      if (brick) {\n        brick.order = order\n        await updateRegistry(registry)\n      }\n    }\n    \n    return NextResponse.json({ success: true })\n  } catch (error) {\n    return NextResponse.json({ error: 'Failed to update registry' }, { status: 500 })\n  }\n}\n\nCreate src/app/api/bricks/metrics/route.ts:\nimport { NextRequest, NextResponse } from 'next/server'\nimport fs from 'fs/promises'\nimport path from 'path'\n\nconst METRICS_FILE = path.join(process.cwd(), 'src/bricks/metrics-calculator/custom-metrics.json')\n\nexport async function GET() {\n  try {\n    const data = await fs.readFile(METRICS_FILE, 'utf-8')\n    return NextResponse.json(JSON.parse(data))\n  } catch (error) {\n    return NextResponse.json([])\n  }\n}\n\nexport async function POST(request: NextRequest) {\n  try {\n    const metric = await request.json()\n    const data = await fs.readFile(METRICS_FILE, 'utf-8')\n    const metrics = JSON.parse(data)\n    metrics.push(metric)\n    await fs.writeFile(METRICS_FILE, JSON.stringify(metrics, null, 2))\n    return NextResponse.json({ success: true })\n  } catch (error) {\n    return NextResponse.json({ error: 'Failed to add metric' }, { status: 500 })\n  }\n}\n\nexport async function DELETE(request: NextRequest) {\n  try {\n    const { name } = await request.json()\n    const data = await fs.readFile(METRICS_FILE, 'utf-8')\n    const metrics = JSON.parse(data)\n    const filtered = metrics.filter((m: any) => m.name !== name)\n    await fs.writeFile(METRICS_FILE, JSON.stringify(filtered, null, 2))\n    return NextResponse.json({ success: true })\n  } catch (error) {\n    return NextResponse.json({ error: 'Failed to delete metric' }, { status: 500 })\n  }\n}",
+        "testStrategy": "Test GET /api/bricks/registry returns current registry. Test PUT with enabled=false, verify registry.json updates. Test POST /api/bricks/metrics with new metric, verify custom-metrics.json updates. Test DELETE, verify metric removed.",
+        "priority": "medium",
+        "dependencies": [
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.654Z"
+      },
+      {
+        "id": "17",
+        "title": "AI Agent Brick Creation System",
+        "description": "Implement POST /api/agent/create-brick endpoint using Anthropic Claude API to generate new Brick modules from natural language prompts",
+        "details": "Create src/app/api/agent/create-brick/route.ts:\nimport { NextRequest, NextResponse } from 'next/server'\nimport Anthropic from '@anthropic-ai/sdk'\nimport fs from 'fs/promises'\nimport path from 'path'\nimport { addBrickToRegistry } from '@/lib/brick-registry'\n\nconst anthropic = new Anthropic({\n  apiKey: process.env.ANTHROPIC_API_KEY\n})\n\nconst SYSTEM_PROMPT = `You are a code generation AI that creates modular \"Brick\" components for a stock analysis application.\n\nBrick Architecture:\n- Each Brick is a self-contained directory under src/bricks/{brick-id}/\n- Required files: manifest.json, component.tsx, index.ts\n- Optional files: api.ts, calculations.ts\n- Component receives props: { ticker: string, market: 'KR' | 'US', data?: Record<string, unknown> }\n- Must use shadcn/ui components (@/components/ui/*)\n- Must be independent (no imports from other Bricks)\n- TypeScript strict mode\n\nWhen given a user prompt, generate:\n1. A unique kebab-case brick-id\n2. manifest.json following the BrickManifest interface\n3. component.tsx with a React component that implements the requested functionality\n4. index.ts barrel export\n5. Any additional files needed (api.ts for data fetching, calculations.ts for formulas)\n\nRespond with a JSON object:\n{\n  \"brickId\": \"unique-brick-id\",\n  \"files\": {\n    \"manifest.json\": \"<file content>\",\n    \"component.tsx\": \"<file content>\",\n    \"index.ts\": \"<file content>\",\n    \"api.ts\": \"<file content (optional)>\",\n    \"calculations.ts\": \"<file content (optional)>\"\n  }\n}`\n\nexport async function POST(request: NextRequest) {\n  try {\n    const { prompt, ticker } = await request.json()\n    \n    if (!prompt) {\n      return NextResponse.json({ error: 'Prompt required' }, { status: 400 })\n    }\n    \n    const message = await anthropic.messages.create({\n      model: 'claude-sonnet-4-20250514',\n      max_tokens: 4000,\n      system: SYSTEM_PROMPT,\n      messages: [{\n        role: 'user',\n        content: `Create a Brick for: ${prompt}\\n\\nTarget ticker: ${ticker}`\n      }]\n    })\n    \n    const responseText = message.content[0].type === 'text' ? message.content[0].text : ''\n    const jsonMatch = responseText.match(/\\{[\\s\\S]*\\}/)\n    if (!jsonMatch) {\n      throw new Error('Invalid AI response format')\n    }\n    \n    const { brickId, files } = JSON.parse(jsonMatch[0])\n    \n    // Write files to src/bricks/{brickId}/\n    const brickDir = path.join(process.cwd(), 'src/bricks', brickId)\n    await fs.mkdir(brickDir, { recursive: true })\n    \n    for (const [filename, content] of Object.entries(files)) {\n      await fs.writeFile(path.join(brickDir, filename), content as string)\n    }\n    \n    // Update registry\n    await addBrickToRegistry(brickId)\n    \n    // Parse manifest for brick name\n    const manifest = JSON.parse(files['manifest.json'] as string)\n    \n    return NextResponse.json({\n      success: true,\n      brickId,\n      brickName: manifest.name\n    })\n  } catch (error) {\n    console.error('Brick creation error:', error)\n    return NextResponse.json({ error: 'Failed to create brick' }, { status: 500 })\n  }\n}",
+        "testStrategy": "Test POST /api/agent/create-brick with prompt '현금흐름지수를 계산해줘'. Verify new directory created in src/bricks/ with all required files. Verify registry.json updated. Navigate to stock page, verify new Brick appears and renders. Test with another prompt to ensure it works consistently.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2",
+          "3",
+          "16"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-31T09:39:04.689Z"
+      },
+      {
+        "id": "18",
+        "title": "Brick Manager and Agent Prompt UI Components",
+        "description": "Build BrickManager for toggling/reordering Bricks and AgentPrompt for natural language Brick creation requests",
+        "details": "Create src/components/agent-prompt.tsx:\n'use client'\nimport { useState } from 'react'\nimport { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'\nimport { Button } from '@/components/ui/button'\nimport { Textarea } from '@/components/ui/textarea'\nimport { useToast } from '@/components/ui/use-toast'\nimport { useRouter } from 'next/navigation'\n\nexport function AgentPrompt({ ticker }: { ticker: string }) {\n  const [prompt, setPrompt] = useState('')\n  const [loading, setLoading] = useState(false)\n  const { toast } = useToast()\n  const router = useRouter()\n  \n  const handleSubmit = async () => {\n    if (!prompt.trim()) return\n    \n    setLoading(true)\n    try {\n      const res = await fetch('/api/agent/create-brick', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({ prompt, ticker })\n      })\n      \n      const data = await res.json()\n      \n      if (data.success) {\n        toast({\n          title: '성공!',\n          description: `${data.brickName}이 추가되었습니다`\n        })\n        setPrompt('')\n        router.refresh() // Hot-reload to show new Brick\n      } else {\n        throw new Error(data.error)\n      }\n    } catch (error) {\n      toast({\n        title: '오류',\n        description: '기능 생성에 실패했습니다. 다시 시도해주세요.',\n        variant: 'destructive'\n      })\n    } finally {\n      setLoading(false)\n    }\n  }\n  \n  return (\n    <Card className=\"mb-6\">\n      <CardHeader>\n        <CardTitle>AI 기능 생성</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <Textarea\n          placeholder=\"새로운 분석 기능을 설명해주세요\\n(예: 현금흐름지수를 계산해줘)\"\n          value={prompt}\n          onChange={(e) => setPrompt(e.target.value)}\n          className=\"mb-4\"\n          rows={4}\n        />\n        <Button\n          onClick={handleSubmit}\n          disabled={loading || !prompt.trim()}\n          className=\"w-full\"\n        >\n          {loading ? 'AI가 기능을 만들고 있어요...' : '기능 생성'}\n        </Button>\n      </CardContent>\n    </Card>\n  )\n}\n\nCreate src/components/brick-manager.tsx:\n'use client'\nimport { useState, useEffect } from 'react'\nimport { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'\nimport { Switch } from '@/components/ui/switch'\nimport { Button } from '@/components/ui/button'\nimport { Badge } from '@/components/ui/badge'\nimport { Trash2Icon, GripVerticalIcon } from 'lucide-react'\nimport { useRouter } from 'next/navigation'\n\nexport function BrickManager() {\n  const [bricks, setBricks] = useState<any[]>([])\n  const router = useRouter()\n  \n  useEffect(() => {\n    async function loadBricks() {\n      const registry = await fetch('/api/bricks/registry').then(r => r.json())\n      \n      // Load manifests for each brick\n      const bricksWithManifest = await Promise.all(\n        registry.bricks.map(async (entry: any) => {\n          try {\n            const manifest = await import(`@/bricks/${entry.id}/manifest.json`)\n            return { ...entry, manifest: manifest.default }\n          } catch (error) {\n            return { ...entry, manifest: { name: entry.id, author: 'unknown', category: 'unknown' } }\n          }\n        })\n      )\n      \n      setBricks(bricksWithManifest.sort((a, b) => a.order - b.order))\n    }\n    loadBricks()\n  }, [])\n  \n  const handleToggle = async (brickId: string, enabled: boolean) => {\n    await fetch('/api/bricks/registry', {\n      method: 'PUT',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ brickId, enabled })\n    })\n    \n    setBricks(prev => prev.map(b => b.id === brickId ? { ...b, enabled } : b))\n    router.refresh()\n  }\n  \n  const handleDelete = async (brickId: string) => {\n    if (!confirm('이 기능을 삭제하시겠습니까?')) return\n    \n    await fetch('/api/agent/delete-brick', {\n      method: 'DELETE',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ brickId })\n    })\n    \n    setBricks(prev => prev.filter(b => b.id !== brickId))\n    router.refresh()\n  }\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>설치된 기능 목록</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <div className=\"space-y-3\">\n          {bricks.map((brick) => (\n            <div key={brick.id} className=\"flex items-center justify-between border p-3 rounded\">\n              <div className=\"flex items-center gap-3\">\n                <GripVerticalIcon className=\"w-4 h-4 text-muted-foreground\" />\n                <div>\n                  <p className=\"font-medium\">{brick.manifest.name}</p>\n                  <Badge variant=\"secondary\">{brick.manifest.category}</Badge>\n                </div>\n              </div>\n              <div className=\"flex items-center gap-2\">\n                <Switch\n                  checked={brick.enabled}\n                  onCheckedChange={(checked) => handleToggle(brick.id, checked)}\n                />\n                {brick.manifest.author !== 'system' && (\n                  <Button\n                    size=\"icon\"\n                    variant=\"ghost\"\n                    onClick={() => handleDelete(brick.id)}\n                  >\n                    <Trash2Icon className=\"w-4 h-4\" />\n                  </Button>\n                )}\n              </div>\n            </div>\n          ))}\n        </div>\n      </CardContent>\n    </Card>\n  )\n}\n\nCreate src/app/api/agent/delete-brick/route.ts:\nimport { NextRequest, NextResponse } from 'next/server'\nimport fs from 'fs/promises'\nimport path from 'path'\nimport { removeBrickFromRegistry, loadRegistry } from '@/lib/brick-registry'\n\nexport async function DELETE(request: NextRequest) {\n  try {\n    const { brickId } = await request.json()\n    \n    // Verify brick exists and is not a system brick\n    const manifestPath = path.join(process.cwd(), `src/bricks/${brickId}/manifest.json`)\n    const manifestData = await fs.readFile(manifestPath, 'utf-8')\n    const manifest = JSON.parse(manifestData)\n    \n    if (manifest.author === 'system') {\n      return NextResponse.json({ error: 'Cannot delete system bricks' }, { status: 403 })\n    }\n    \n    // Delete directory\n    const brickDir = path.join(process.cwd(), 'src/bricks', brickId)\n    await fs.rm(brickDir, { recursive: true, force: true })\n    \n    // Remove from registry\n    await removeBrickFromRegistry(brickId)\n    \n    return NextResponse.json({ success: true })\n  } catch (error) {\n    console.error('Brick deletion error:', error)\n    return NextResponse.json({ error: 'Failed to delete brick' }, { status: 500 })\n  }\n}",
+        "testStrategy": "Navigate to stock page. Enter prompt in AgentPrompt, verify loading state shows. After success, verify toast notification appears and new Brick renders. In BrickManager, toggle a Brick off, refresh page, verify Brick doesn't render. Toggle back on, verify it reappears. Delete an AI-generated Brick, verify it's removed from list and filesystem. Try to delete system Brick, verify it's prevented.",
+        "priority": "high",
+        "dependencies": [
+          "4",
+          "10",
+          "11",
+          "16",
+          "17"
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-03-31T09:39:04.690Z",
+      "taskCount": 18,
+      "completedCount": 17,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}

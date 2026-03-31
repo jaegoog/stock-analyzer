@@ -1,0 +1,24 @@
+{
+  "bricks": [
+    {
+      "id": "financial-statements",
+      "enabled": true,
+      "order": 0
+    },
+    {
+      "id": "interactive-chart",
+      "enabled": true,
+      "order": 1
+    },
+    {
+      "id": "metrics-calculator",
+      "enabled": true,
+      "order": 2
+    },
+    {
+      "id": "news",
+      "enabled": true,
+      "order": 3
+    }
+  ]
+}

@@ -1,0 +1,270 @@
+# Stock Analysis Tool — Product Requirements Document
+
+## Project Overview
+A Next.js 15 + TypeScript web application for stock analysis with a modular "Lego Brick"
+plugin architecture. Users can analyze Korean (KOSPI/KOSDAQ) and US (NYSE/NASDAQ) stocks.
+Each analysis feature is an independent Brick that can be added, removed, or disabled independently.
+An AI agent accepts natural language prompts (e.g. "현금흐름지수를 계산해줘", "비즈니스 모델을 찾아줘")
+and automatically generates new Brick modules in real-time.
+
+## Tech Stack
+- Framework: Next.js 15 (App Router), TypeScript (strict mode)
+- UI: Tailwind CSS, shadcn/ui components
+- Charts: Recharts (interactive - zoom, hover, download)
+- Stock Data: yahoo-finance2 npm package (US + KR stocks via .KS/.KQ suffix)
+- KR Financial Statements: OpenDART REST API (free key from opendart.fss.or.kr)
+- News: Finnhub API (US stocks), Naver Finance server-side scraping (KR stocks)
+- AI Agent: Anthropic Claude API for dynamic Brick code generation
+- Package Manager: npm
+
+## Core Architecture: Brick Plugin System
+
+### Brick Directory Structure
+Every analysis feature lives as a self-contained directory under src/bricks/:
+
+src/bricks/
+  registry.json              — master list of all Bricks (id + enabled boolean)
+  financial-statements/
+    manifest.json            — Brick metadata
+    component.tsx            — React UI component
+    api.ts                   — data fetching
+    index.ts                 — barrel export
+  news/
+    manifest.json
+    component.tsx
+    api.ts
+    index.ts
+  metrics-calculator/
+    manifest.json
+    component.tsx
+    calculations.ts          — formula definitions
+    index.ts
+  interactive-chart/
+    manifest.json
+    component.tsx
+    index.ts
+
+### manifest.json Schema
+{
+  "id": "financial-statements",
+  "name": "재무제표",
+  "description": "손익계산서, 재무상태표, 현금흐름표",
+  "version": "1.0.0",
+  "author": "system",
+  "category": "table",
+  "dataRequired": ["financials"],
+  "enabled": true,
+  "createdAt": "2026-03-31"
+}
+
+### registry.json Schema
+{
+  "bricks": [
+    { "id": "financial-statements", "enabled": true, "order": 0 },
+    { "id": "news", "enabled": true, "order": 1 },
+    { "id": "metrics-calculator", "enabled": true, "order": 2 },
+    { "id": "interactive-chart", "enabled": true, "order": 3 }
+  ]
+}
+
+### Brick Interface (TypeScript)
+interface BrickManifest {
+  id: string
+  name: string
+  description: string
+  version: string
+  author: 'system' | 'ai-agent' | 'user'
+  category: 'calculation' | 'chart' | 'research' | 'table' | 'alert'
+  dataRequired: string[]
+  enabled: boolean
+  createdAt: string
+}
+
+interface BrickModule {
+  manifest: BrickManifest
+  Component: React.ComponentType<BrickProps>
+}
+
+interface BrickProps {
+  ticker: string
+  market: 'KR' | 'US'
+  data?: Record<string, unknown>
+}
+
+### AI Agent Brick Creation Flow
+1. User enters natural language prompt in AgentPrompt UI
+2. POST /api/agent/create-brick { prompt: string, ticker: string }
+3. Server calls Claude API with system prompt explaining Brick structure
+4. Claude generates: manifest.json, component.tsx, api.ts (if needed), calculations.ts (if needed), index.ts
+5. API route writes files to src/bricks/{brick-id}/
+6. API route updates registry.json (appends new entry, enabled: true)
+7. Response returns { brickId, success }
+8. Frontend triggers router.refresh() to hot-reload new Brick
+
+### Brick Deletion Flow
+DELETE /api/agent/delete-brick { brickId: string }
+- Removes src/bricks/{brickId}/ directory recursively
+- Removes entry from registry.json
+
+## Required Features
+
+### F1: Stock Search (StockSearch component)
+- Search input accepts company name (삼성전자) or ticker (005930, AAPL)
+- Uses yahoo-finance2.search() API route: GET /api/stocks/search?q={query}
+- Results show: ticker, company name, exchange, currency
+- Auto-detect KR tickers (numeric 6-digit = KRX, append .KS or .KQ)
+- Clicking result navigates to /stock/{ticker}
+
+### F2: Stock Overview Card (StockOverview component)
+- Displays: current price, change amount, change%, market cap, P/E ratio
+- Additional: 52-week high/low, volume, sector, industry
+- Data: GET /api/stocks/{ticker} using yahoo-finance2.quote()
+- Auto-refresh every 60 seconds
+
+### F3: Financial Statements Brick
+- Three tabs: Income Statement / Balance Sheet / Cash Flow
+- Two views: Annual (5 years) / Quarterly (8 quarters)
+- Data sources:
+  - KR companies: GET /api/stocks/{ticker}/dart (OpenDART API)
+  - US companies: GET /api/stocks/{ticker}/financials (yahoo-finance2)
+- Customizable rows: users can check/uncheck fields to show/hide
+- Field visibility config saved in localStorage key "financial-fields-{ticker}"
+- Default visible fields stored in src/bricks/financial-statements/default-fields.json
+- Numbers formatted as Korean 억/조 for KR, USD billions for US
+
+### F4: Interactive Chart Brick
+- Select financial metric from dropdown (revenue, operating income, net income, etc.)
+- Chart types: Bar (default), Line, Area — toggle buttons
+- Multi-series: compare up to 3 metrics simultaneously
+- Recharts features: zoom by drag, hover tooltip showing exact values, reset zoom button
+- Export: PNG download button using html2canvas or recharts built-in
+- Time range filter: 3Y / 5Y / 10Y / All
+
+### F5: Metrics Calculator Brick
+- Built-in metrics (read-only, always present):
+  PER = price / eps
+  EPS = netIncome / sharesOutstanding
+  PBR = price / (totalEquity / sharesOutstanding)
+  ROE = netIncome / totalEquity * 100
+  Debt Ratio = totalDebt / totalAssets * 100
+  Current Ratio = currentAssets / currentLiabilities
+- Custom metrics section:
+  - "Add Formula" button opens modal
+  - Fields: name (string), formula (expression using field names), description
+  - Formula variables are field names from financial data
+  - Formulas persisted in src/bricks/metrics-calculator/custom-metrics.json
+  - Delete button per custom metric
+- All metrics calculated live using current stock data
+
+### F6: News Brick
+- Tab: All / Positive / Negative (basic keyword sentiment)
+- US stocks: Finnhub GET /api/v1/company-news?symbol={ticker}&from={30daysAgo}&to={today}
+- KR stocks: Server-side fetch from Naver Finance news URL, parse with cheerio
+- Display per item: date, headline, source name, external link (opens new tab)
+- Pagination: 10 items per page
+
+### F7: AI Agent Prompt Interface (AgentPrompt component)
+- Located in right sidebar of stock detail page
+- Textarea placeholder: "새로운 분석 기능을 설명해주세요 (예: 현금흐름지수를 계산해줘)"
+- Submit button labeled "기능 생성"
+- States: idle / loading (spinner + "AI가 기능을 만들고 있어요...") / success / error
+- On success: shows Brick name + "이 추가되었습니다" toast notification
+- On error: shows error message with retry button
+
+### F8: Brick Manager Panel (BrickManager component)
+- Located in right sidebar below AgentPrompt
+- Title: "설치된 기능 목록"
+- List all Bricks from registry.json
+- Each row: Brick name, category badge, toggle switch (enable/disable)
+- Toggle calls PUT /api/bricks/registry { brickId, enabled }
+- Delete button (trash icon) — confirmation dialog before DELETE /api/agent/delete-brick
+- Drag handle icon for reordering (updates "order" in registry.json)
+- System Bricks (author: "system") cannot be deleted, only disabled
+
+## Page Layout
+
+### Home Page (/)
+- Centered search bar
+- Recent searches (localStorage)
+- Market index summary (KOSPI, KOSDAQ, S&P 500, NASDAQ)
+
+### Stock Detail Page (/stock/[ticker])
+Layout (2-column):
+  Left column (75% width):
+    - StockOverview card (full width)
+    - BrickRenderer: renders all enabled Bricks in order from registry.json
+  Right column (25% width):
+    - AgentPrompt (top)
+    - BrickManager (below)
+
+## API Routes
+
+### GET /api/stocks/search?q={query}
+- Calls yahoo-finance2.search(q)
+- Returns: Array<{ ticker, name, exchange, type }>
+
+### GET /api/stocks/[ticker]
+- Calls yahoo-finance2.quote(ticker)
+- Returns: { price, change, changePercent, marketCap, pe, high52, low52, volume, sector }
+
+### GET /api/stocks/[ticker]/financials?period=annual|quarterly
+- US: yahoo-finance2.quoteSummary(ticker, { modules: ['incomeStatementHistory', 'balanceSheetHistory', 'cashflowStatementHistory'] })
+- KR: calls OpenDART API with corp_code lookup
+- Returns normalized FinancialData object
+
+### GET /api/stocks/[ticker]/dart
+- Looks up corp_code from DART corp_code XML
+- Calls DART /api/fnlttSinglAcntAll.json
+- Returns normalized financial statements
+
+### GET /api/stocks/[ticker]/news
+- KR tickers: scrapes Naver Finance news with cheerio
+- US tickers: calls Finnhub /api/v1/company-news
+- Returns: Array<{ date, headline, source, url, sentiment }>
+
+### POST /api/agent/create-brick
+Request: { prompt: string, ticker: string, market: 'KR' | 'US' }
+- Builds Claude prompt with Brick architecture context
+- Calls Anthropic API (claude-sonnet-4-6)
+- Parses response to extract file contents
+- Writes files to src/bricks/{brickId}/
+- Updates registry.json
+Response: { success: boolean, brickId: string, brickName: string }
+
+### DELETE /api/agent/delete-brick
+Request: { brickId: string }
+- Validates brickId exists and author !== 'system'
+- Removes directory
+- Updates registry.json
+Response: { success: boolean }
+
+### PUT /api/bricks/registry
+Request: { brickId: string, enabled?: boolean, order?: number }
+- Updates registry.json entry
+Response: { success: boolean }
+
+## Environment Variables (.env.local)
+ANTHROPIC_API_KEY=     # Required: Claude API for Brick generation
+DART_API_KEY=          # Required for KR stocks: get free key at opendart.fss.or.kr
+FINNHUB_API_KEY=       # Required for US news: get free key at finnhub.io
+
+## Non-Functional Requirements
+- Bricks MUST NOT import from other Brick directories
+- Each Brick must work independently with only BrickProps as input
+- AI-generated Bricks must follow identical structure to system Bricks
+- TypeScript strict mode enforced
+- Mobile-responsive (breakpoints: sm, md, lg)
+- Loading skeletons for all async data
+- Error boundaries per Brick (one Brick failing must not crash others)
+
+## Acceptance Criteria
+1. Search "삼성전자" → loads KR stock data, financial statements via DART
+2. Search "AAPL" → loads US stock data, financial statements via yahoo-finance2
+3. Type "현금흐름지수를 계산해줘" in AgentPrompt → new Brick appears within 30s
+4. Type "비즈니스 모델을 찾아줘" → new research Brick fetches and displays business model
+5. Toggle Brick off in BrickManager → Brick disappears from dashboard immediately
+6. Delete AI-generated Brick → removed from dashboard and filesystem
+7. Add custom formula "매출성장률 = (revenue - prevRevenue) / prevRevenue * 100" → calculates correctly
+8. Chart zoom drag → zooms in; Reset button → returns to full view
+9. News tab loads within 3 seconds
+10. Each Brick renders independently even if another Brick throws an error

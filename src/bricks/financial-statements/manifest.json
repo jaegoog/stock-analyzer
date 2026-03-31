@@ -1,0 +1,11 @@
+{
+  "id": "financial-statements",
+  "name": "재무제표",
+  "description": "손익계산서, 재무상태표, 현금흐름표를 연간/분기별로 표시",
+  "version": "1.0.0",
+  "author": "system",
+  "category": "table",
+  "dataRequired": ["financials"],
+  "enabled": true,
+  "createdAt": "2026-03-31"
+}

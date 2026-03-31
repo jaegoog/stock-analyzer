@@ -1,0 +1,11 @@
+{
+  "id": "metrics-calculator",
+  "name": "투자 지표 계산기",
+  "description": "PER, EPS, PBR, ROE 등 핵심 투자 지표 계산 및 커스텀 공식 추가",
+  "version": "1.0.0",
+  "author": "system",
+  "category": "calculation",
+  "dataRequired": ["quote", "financials"],
+  "enabled": true,
+  "createdAt": "2026-03-31"
+}
