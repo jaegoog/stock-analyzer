@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import yahooFinance from '@/lib/yahoo-finance'
 import { detectMarket, normalizeKRTicker } from '@/lib/utils'
-import type { StockQuote } from '@/types'
+import { getPriceProvider } from '@/providers/router'
 
 export async function GET(
   _req: NextRequest,
@@ -9,28 +8,13 @@ export async function GET(
 ) {
   const { ticker } = await params
   const symbol = normalizeKRTicker(decodeURIComponent(ticker))
+  const market = detectMarket(symbol)
 
   try {
-    const quote = await yahooFinance.quote(symbol, {}, { validateResult: false }) as Record<string, unknown>
+    const provider = await getPriceProvider(market)
+    if (!provider) return NextResponse.json({ error: 'No price provider configured' }, { status: 503 })
 
-    const result: StockQuote = {
-      ticker: symbol,
-      name: (quote.longName ?? quote.shortName ?? symbol) as string,
-      price: (quote.regularMarketPrice as number) ?? 0,
-      change: (quote.regularMarketChange as number) ?? 0,
-      changePercent: (quote.regularMarketChangePercent as number) ?? 0,
-      marketCap: (quote.marketCap as number) ?? null,
-      pe: (quote.trailingPE as number) ?? null,
-      high52: (quote.fiftyTwoWeekHigh as number) ?? null,
-      low52: (quote.fiftyTwoWeekLow as number) ?? null,
-      volume: (quote.regularMarketVolume as number) ?? null,
-      sector: (quote.sector as string) ?? null,
-      industry: (quote.industry as string) ?? null,
-      currency: (quote.currency as string) ?? 'USD',
-      exchange: (quote.fullExchangeName as string) ?? (quote.exchange as string) ?? '',
-      market: detectMarket(symbol),
-    }
-
+    const result = await provider.getQuote(symbol, market)
     return NextResponse.json(result)
   } catch (error) {
     console.error('[quote]', error)

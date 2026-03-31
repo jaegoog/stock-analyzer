@@ -1,0 +1,14 @@
+{
+  "id": "fred",
+  "name": "FRED (Federal Reserve)",
+  "description": "미국 연방준비은행 경제 데이터 — 금리, GDP, 물가지수 등 거시경제 지표",
+  "version": "1.0.0",
+  "author": "system",
+  "markets": ["US", "GLOBAL"],
+  "dataTypes": ["macro"],
+  "requiresApiKey": true,
+  "apiKeyEnvVar": "FRED_API_KEY",
+  "enabled": false,
+  "createdAt": "2026-03-31",
+  "homepage": "https://fred.stlouisfed.org"
+}

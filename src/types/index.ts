@@ -2,7 +2,7 @@
 
 export type BrickCategory = 'calculation' | 'chart' | 'research' | 'table' | 'alert'
 export type BrickAuthor = 'system' | 'ai-agent' | 'user'
-export type Market = 'KR' | 'US'
+export type Market = 'KR' | 'US' | 'GLOBAL'
 
 export interface BrickManifest {
   id: string
@@ -132,6 +132,29 @@ export interface MetricResult {
   metric: Metric
   value: number | null
   error?: string
+}
+
+// ─── Macro Data ───────────────────────────────────────────────────────────────
+
+export interface MacroDataPoint {
+  date: string
+  value: number | null
+}
+
+export interface MacroSeries {
+  seriesId: string
+  name: string
+  description: string
+  frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual'
+  units: string
+  data: MacroDataPoint[]
+  source: string
+}
+
+export interface MacroQueryOptions {
+  startDate?: string
+  endDate?: string
+  limit?: number
 }
 
 // ─── Agent ────────────────────────────────────────────────────────────────────

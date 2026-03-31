@@ -1,0 +1,52 @@
+{
+  "providers": [
+    {
+      "id": "yahoo-finance",
+      "enabled": true,
+      "priority": {
+        "US:price": 0,
+        "KR:price": 0,
+        "US:financials": 0,
+        "US:search": 0,
+        "KR:search": 0
+      }
+    },
+    {
+      "id": "dart",
+      "enabled": true,
+      "priority": {
+        "KR:financials": 0
+      }
+    },
+    {
+      "id": "finnhub",
+      "enabled": true,
+      "priority": {
+        "US:news": 0
+      }
+    },
+    {
+      "id": "naver-finance",
+      "enabled": true,
+      "priority": {
+        "KR:news": 0
+      }
+    },
+    {
+      "id": "fred",
+      "enabled": false,
+      "priority": {
+        "US:macro": 0,
+        "GLOBAL:macro": 0
+      }
+    },
+    {
+      "id": "ecos",
+      "enabled": false,
+      "priority": {
+        "KR:macro": 0,
+        "GLOBAL:macro": 1
+      }
+    }
+  ]
+}

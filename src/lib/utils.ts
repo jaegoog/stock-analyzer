@@ -51,3 +51,15 @@ export function normalizeKRTicker(ticker: string): string {
   if (/^\d{6}$/.test(ticker)) return `${ticker}.KS`
   return ticker
 }
+
+const POSITIVE_WORDS = ['상승', '급등', '호실적', '성장', '매수', 'beat', 'surge', 'record', 'growth', 'profit']
+const NEGATIVE_WORDS = ['하락', '급락', '손실', '감소', '매도', 'miss', 'decline', 'loss', 'cut', 'warning']
+
+export function guessSentiment(text: string): 'positive' | 'negative' | 'neutral' {
+  const lower = text.toLowerCase()
+  const pos = POSITIVE_WORDS.filter((w) => lower.includes(w)).length
+  const neg = NEGATIVE_WORDS.filter((w) => lower.includes(w)).length
+  if (pos > neg) return 'positive'
+  if (neg > pos) return 'negative'
+  return 'neutral'
+}

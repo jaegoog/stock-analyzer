@@ -1,0 +1,13 @@
+{
+  "id": "naver-finance",
+  "name": "Naver Finance",
+  "description": "한국 주식 뉴스 (네이버 파이낸스 크롤링)",
+  "version": "1.0.0",
+  "author": "system",
+  "markets": ["KR"],
+  "dataTypes": ["news"],
+  "requiresApiKey": false,
+  "enabled": true,
+  "createdAt": "2026-03-31",
+  "homepage": "https://finance.naver.com"
+}

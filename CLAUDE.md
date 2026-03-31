@@ -5,17 +5,23 @@
 ## 프로젝트 개요
 Next.js 15 + TypeScript 기반 주식 분석 웹앱.
 한국(KOSPI/KOSDAQ)과 미국(NYSE/NASDAQ) 주식의 재무제표·차트·지표를 분석하며,
-**Lego Brick 구조**로 모든 분석 기능이 독립 플러그인으로 존재한다.
+**두 개의 독립 플러그인 시스템**으로 구성된다.
+
+1. **Brick 시스템** — UI 분석 컴포넌트 플러그인 (차트, 테이블 등)
+2. **Provider 시스템** — 데이터 소스 플러그인 (Yahoo Finance, DART, FRED 등)
+
 AI 에이전트가 자연어 프롬프트를 받아 새 Brick을 실시간으로 생성·추가할 수 있다.
 
 ## 개발 서버
 ```bash
-cd E:/n_pj/stock-analyzer
+cd F:/n_pj/stock-analyzer
 npm run dev        # http://localhost:3000
 npx tsc --noEmit   # 타입 검사
 ```
 
-## 핵심 아키텍처: Brick 시스템
+---
+
+## 핵심 아키텍처 1: Brick 시스템 (UI 플러그인)
 
 ### Brick 디렉토리 구조
 ```
@@ -52,101 +58,161 @@ src/bricks/
 | `metrics-calculator` | 투자 지표 계산기 | calculation |
 | `news` | 관련 뉴스 | research |
 
+---
+
+## 핵심 아키텍처 2: Provider 시스템 (데이터 소스 플러그인)
+
+### Provider 디렉토리 구조
+```
+src/providers/
+  registry.json                  ← Provider 목록 (enabled/priority 관리)
+  types.ts                       ← ProviderFactory, PriceProvider 등 인터페이스
+  provider-registry.ts           ← resolveProvider() 등 CRUD 유틸
+  router.ts                      ← market+dataType → Provider 동적 로드
+  {provider-id}/
+    manifest.json                ← Provider 메타정보
+    index.ts                     ← ProviderFactory default export
+```
+
+### 등록된 Provider
+| ID | 이름 | 시장 | 데이터 타입 | 상태 |
+|----|------|------|-----------|------|
+| `yahoo-finance` | Yahoo Finance | US·KR | price, financials, search | 활성 |
+| `dart` | OpenDART | KR | financials | 활성 |
+| `finnhub` | Finnhub | US | news | 활성 |
+| `naver-finance` | Naver Finance | KR | news | 활성 |
+| `fred` | FRED (연준) | US·GLOBAL | macro | 비활성 |
+| `ecos` | ECOS (한국은행) | KR·GLOBAL | macro | 비활성 |
+
+### Provider 라우팅 원칙
+- API 라우트는 `router.ts`를 통해 **market + dataType** 조합으로 Provider를 자동 선택
+- `registry.json`의 `priority` 값이 낮을수록 우선 선택 (예: `"KR:financials": 0`)
+- 같은 조합에 여러 Provider 등록 가능 → fallback 체계 구현 가능
+
+### 새 Provider 추가 방법 (기존 코드 수정 없음)
+```bash
+# 1. 디렉토리 생성
+mkdir src/providers/{provider-id}
+
+# 2. manifest.json 작성 (markets, dataTypes, apiKeyEnvVar 명시)
+# 3. index.ts 작성 (ProviderFactory 인터페이스 구현)
+# 4. src/providers/registry.json에 항목 추가
+# 5. .env.local에 API 키 추가 (필요 시)
+```
+
+### Provider manifest.json 필수 필드
+```json
+{
+  "id": "provider-id",
+  "name": "표시 이름",
+  "description": "설명",
+  "version": "1.0.0",
+  "author": "system | user | community",
+  "markets": ["US", "KR", "GLOBAL"],
+  "dataTypes": ["price", "financials", "news", "macro", "search"],
+  "requiresApiKey": true,
+  "apiKeyEnvVar": "MY_API_KEY",
+  "enabled": false,
+  "createdAt": "YYYY-MM-DD"
+}
+```
+
+### Provider index.ts 구조
+```typescript
+import type { ProviderFactory } from '../types'
+import manifest from './manifest.json'
+
+const provider: ProviderFactory = {
+  manifest: manifest as ProviderFactory['manifest'],
+  createFinancialsProvider: () => ({ ... }),  // 필요한 것만 구현
+}
+export default provider
+```
+
+---
+
 ## 파일 구조 요약
 ```
 src/
 ├── app/
-│   ├── page.tsx                         # 메인 검색 페이지
-│   ├── stock/[ticker]/page.tsx          # 기업 분석 페이지
+│   ├── page.tsx                              # 메인 검색 페이지
+│   ├── stock/[ticker]/page.tsx               # 기업 분석 페이지
 │   └── api/
-│       ├── stocks/search/               # GET ?q= 기업 검색 (yahoo-finance2)
-│       ├── stocks/[ticker]/             # GET 시세 (yahoo-finance2)
-│       ├── stocks/[ticker]/financials/  # GET 미국 재무제표 (fundamentalsTimeSeries)
-│       ├── stocks/[ticker]/news/        # GET 뉴스 (Finnhub / Naver 크롤링)
-│       ├── stocks/[ticker]/dart/        # GET 한국 재무제표 (OpenDART API)
-│       ├── agent/create-brick/          # POST AI Brick 자동 생성
-│       ├── agent/delete-brick/          # DELETE Brick 삭제
-│       └── bricks/registry/             # GET/PUT Brick 활성화 관리
-├── bricks/                              # ← Brick 플러그인 저장소
+│       ├── stocks/search/                    # GET ?q= 기업 검색
+│       ├── stocks/[ticker]/                  # GET 시세 → PriceProvider
+│       ├── stocks/[ticker]/financials/       # GET 재무제표 → FinancialsProvider
+│       ├── stocks/[ticker]/news/             # GET 뉴스 → NewsProvider
+│       ├── stocks/[ticker]/dart/             # GET 한국 재무제표 (레거시 유지)
+│       ├── providers/registry/               # GET/PUT Provider 활성화 관리
+│       ├── providers/[providerId]/manifest/  # GET Provider 메타정보
+│       ├── agent/create-brick/               # POST AI Brick 자동 생성
+│       ├── agent/delete-brick/               # DELETE Brick 삭제
+│       └── bricks/registry/                  # GET/PUT Brick 활성화 관리
+├── bricks/                                   # Brick 플러그인 저장소
+├── providers/                                # Provider 플러그인 저장소
 ├── components/
-│   ├── BrickRenderer.tsx                # registry 기반 동적 Brick 렌더링
-│   ├── BrickManager.tsx                 # Brick 활성/비활성/삭제 UI
-│   ├── AgentPrompt.tsx                  # 자연어 → Brick 생성 UI
-│   ├── StockSearch.tsx                  # 기업 검색창
-│   └── StockOverview.tsx                # 시세 요약 카드
+│   ├── BrickRenderer.tsx                     # registry 기반 동적 Brick 렌더링
+│   ├── BrickManager.tsx                      # Brick 활성/비활성/삭제 UI
+│   ├── ProviderManager.tsx                   # Provider 활성/비활성 UI
+│   ├── AgentPrompt.tsx                       # 자연어 → Brick 생성 UI
+│   ├── StockSearch.tsx                       # 기업 검색창
+│   └── StockOverview.tsx                     # 시세 요약 카드
 ├── lib/
-│   ├── yahoo-finance.ts                 # yahoo-finance2 싱글턴 (new YahooFinance())
-│   ├── brick-registry.ts                # registry.json 읽기/쓰기 유틸
-│   └── utils.ts                         # formatNumber, detectMarket 등
-└── types/index.ts                       # 전체 TypeScript 인터페이스
+│   ├── yahoo-finance.ts                      # yahoo-finance2 싱글턴
+│   ├── brick-registry.ts                     # Brick registry 유틸
+│   └── utils.ts                              # formatNumber, detectMarket, guessSentiment 등
+└── types/index.ts                            # 전체 TypeScript 인터페이스
 ```
 
-## 데이터 소스
-| 용도 | 소스 | 비고 |
-|------|------|------|
-| US/KR 시세·검색 | `yahoo-finance2` (npm) | `new YahooFinance()` 인스턴스 필수 |
-| US 재무제표 | `fundamentalsTimeSeries` API | `quoteSummary` 사용 금지 (Nov 2024 이후 데이터 없음) |
-| KR 재무제표 | OpenDART REST API | corp_code는 `corpCode.xml` ZIP 파싱으로 조회 |
-| US 뉴스 | Finnhub `/company-news` | `FINNHUB_API_KEY` 필요 |
-| KR 뉴스 | Naver Finance 크롤링 | cheerio 사용 |
-| AI Brick 생성 | Anthropic Claude API | `claude-sonnet-4-6` 모델 |
+---
 
 ## 환경변수 (.env.local)
 ```
 ANTHROPIC_API_KEY=   # AI Brick 생성용
 DART_API_KEY=        # 한국 재무제표 (opendart.fss.or.kr)
 FINNHUB_API_KEY=     # 미국 뉴스 (finnhub.io)
+FRED_API_KEY=        # 거시경제-미국 (fred.stlouisfed.org) — Provider 활성화 시 필요
+ECOS_API_KEY=        # 거시경제-한국 (ecos.bok.or.kr) — Provider 활성화 시 필요
 ```
 
-## 새 Brick 추가 방법
-
-### 방법 1: AI 자동 생성 (런타임)
-브라우저 사이드바 "AI 기능 추가" 입력창에 프롬프트 입력
-→ `POST /api/agent/create-brick` → Claude API가 파일 생성 → 즉시 렌더링
-
-### 방법 2: 수동 생성
-```bash
-mkdir src/bricks/{brick-id}
-# manifest.json, component.tsx, index.ts 작성
-# src/bricks/registry.json 에 항목 추가
-```
-
-### manifest.json 필수 필드
-```json
-{
-  "id": "kebab-case-id",
-  "name": "한국어 이름",
-  "description": "한국어 설명",
-  "version": "1.0.0",
-  "author": "system | ai-agent | user",
-  "category": "calculation | chart | research | table | alert",
-  "dataRequired": [],
-  "enabled": true,
-  "createdAt": "YYYY-MM-DD"
-}
-```
+---
 
 ## 자주 쓰는 명령어
 ```bash
 # 타입 체크
 npx tsc --noEmit
 
-# DART API 테스트 (삼성전자)
-curl http://localhost:3000/api/stocks/005930.KS/dart
+# 시세 테스트
+curl http://localhost:3000/api/stocks/AAPL
+curl http://localhost:3000/api/stocks/005930.KS
 
-# US 재무제표 테스트
+# 재무제표 테스트
 curl http://localhost:3000/api/stocks/AAPL/financials
+curl http://localhost:3000/api/stocks/005930.KS/financials
+
+# 뉴스 테스트
+curl http://localhost:3000/api/stocks/AAPL/news
+curl http://localhost:3000/api/stocks/005930.KS/news
+
+# Provider 목록 확인
+curl http://localhost:3000/api/providers/registry
 
 # Brick 목록 확인
 curl http://localhost:3000/api/bricks/registry
-
-# TaskMaster 작업 목록
-npx --package=task-master-ai task-master list
 ```
+
+---
 
 ## 주요 타입 (src/types/index.ts)
 - `BrickProps` — 모든 Brick 컴포넌트가 받는 props
-- `BrickManifest` — manifest.json 스키마
+- `BrickManifest` — Brick manifest.json 스키마
 - `FinancialData` — 재무제표 데이터 구조
 - `StockQuote` — 시세 데이터
-- `Market` — `'KR' | 'US'`
+- `MacroSeries` — 거시경제 시계열 데이터
+- `Market` — `'KR' | 'US' | 'GLOBAL'`
+
+## 주요 타입 (src/providers/types.ts)
+- `ProviderFactory` — Provider index.ts의 default export 인터페이스
+- `ProviderManifest` — Provider manifest.json 스키마
+- `PriceProvider` / `FinancialsProvider` / `NewsProvider` / `MacroProvider`
+- `DataType` — `'price' | 'financials' | 'news' | 'macro' | 'search'`

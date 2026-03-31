@@ -1,0 +1,14 @@
+{
+  "id": "finnhub",
+  "name": "Finnhub",
+  "description": "미국 주식 뉴스 (finnhub.io)",
+  "version": "1.0.0",
+  "author": "system",
+  "markets": ["US"],
+  "dataTypes": ["news"],
+  "requiresApiKey": true,
+  "apiKeyEnvVar": "FINNHUB_API_KEY",
+  "enabled": true,
+  "createdAt": "2026-03-31",
+  "homepage": "https://finnhub.io"
+}

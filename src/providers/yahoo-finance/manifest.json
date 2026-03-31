@@ -1,0 +1,13 @@
+{
+  "id": "yahoo-finance",
+  "name": "Yahoo Finance",
+  "description": "미국·한국 주가 및 검색, 미국 재무제표 (yahoo-finance2 npm)",
+  "version": "1.0.0",
+  "author": "system",
+  "markets": ["US", "KR"],
+  "dataTypes": ["price", "financials", "search"],
+  "requiresApiKey": false,
+  "enabled": true,
+  "createdAt": "2026-03-31",
+  "homepage": "https://github.com/gadicc/node-yahoo-finance2"
+}

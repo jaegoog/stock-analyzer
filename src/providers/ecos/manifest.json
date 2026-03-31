@@ -1,0 +1,14 @@
+{
+  "id": "ecos",
+  "name": "ECOS (한국은행)",
+  "description": "한국은행 경제통계시스템 — 기준금리, 환율, M2 등 한국 거시경제 지표",
+  "version": "1.0.0",
+  "author": "system",
+  "markets": ["KR", "GLOBAL"],
+  "dataTypes": ["macro"],
+  "requiresApiKey": true,
+  "apiKeyEnvVar": "ECOS_API_KEY",
+  "enabled": false,
+  "createdAt": "2026-03-31",
+  "homepage": "https://ecos.bok.or.kr"
+}

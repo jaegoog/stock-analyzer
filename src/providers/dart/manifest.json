@@ -1,0 +1,14 @@
+{
+  "id": "dart",
+  "name": "OpenDART",
+  "description": "한국 금융감독원 전자공시 — 한국 재무제표",
+  "version": "1.0.0",
+  "author": "system",
+  "markets": ["KR"],
+  "dataTypes": ["financials"],
+  "requiresApiKey": true,
+  "apiKeyEnvVar": "DART_API_KEY",
+  "enabled": true,
+  "createdAt": "2026-03-31",
+  "homepage": "https://opendart.fss.or.kr"
+}
